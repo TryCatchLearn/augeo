@@ -41,6 +41,7 @@ This repository is currently very close to the default starter. Treat it as an e
 - Prefer server components by default. Add `"use client"` only when client-side interactivity is required.
 - Use the `@/` alias for imports rooted in `src/`.
 - Reuse `cn()` from `src/lib/utils.ts` for conditional class names.
+- Prefer `lucide-react` for icons instead of custom SVG icon components unless a custom brand mark is explicitly required.
 - Follow existing formatting conventions enforced by Biome rather than hand-formatting.
 - Keep components small and composable. If a component is generic and reusable, place it under `src/components/`.
 
