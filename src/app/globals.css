@@ -127,3 +127,22 @@
     @apply font-sans;
   }
 }
+
+::view-transition-group(.route-crossfade) {
+  animation-duration: 220ms;
+  animation-timing-function: ease;
+}
+
+::view-transition-old(.route-crossfade),
+::view-transition-new(.route-crossfade) {
+  animation-duration: 220ms;
+  animation-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(.route-crossfade),
+  ::view-transition-old(.route-crossfade),
+  ::view-transition-new(.route-crossfade) {
+    animation: none;
+  }
+}
