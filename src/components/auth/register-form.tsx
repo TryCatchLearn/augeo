@@ -1,6 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { AuthFormShell } from "@/components/auth/auth-form-shell";
 import { Button } from "@/components/ui/button";
@@ -13,12 +15,16 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { authClient } from "@/lib/auth-client";
 import { type RegisterFormValues, registerSchema } from "@/lib/schemas/auth";
 
 export function RegisterForm() {
+  const router = useRouter();
+  const [isRedirecting, startRedirectTransition] = useTransition();
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -30,8 +36,24 @@ export function RegisterForm() {
     },
   });
 
-  const onSubmit = (values: RegisterFormValues) => {
-    console.log("register form submitted", values);
+  const onSubmit = async (values: RegisterFormValues) => {
+    const { error } = await authClient.signUp.email({
+      name: values.displayName,
+      email: values.email,
+      password: values.password,
+    });
+
+    if (error) {
+      setError("root", {
+        message: error.message || "Unable to create your account right now.",
+      });
+      return;
+    }
+
+    startRedirectTransition(() => {
+      router.push("/dashboard");
+      router.refresh();
+    });
   };
 
   return (
@@ -107,11 +129,13 @@ export function RegisterForm() {
           </Field>
         </FieldGroup>
 
+        <FieldError errors={[errors.root]} />
+
         <Button
           type="submit"
           size="lg"
           className="w-full"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isRedirecting}
         >
           Create account
         </Button>

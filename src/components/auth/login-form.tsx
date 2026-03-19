@@ -1,6 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { AuthFormShell } from "@/components/auth/auth-form-shell";
 import { Button } from "@/components/ui/button";
@@ -13,12 +15,17 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { authClient } from "@/lib/auth-client";
 import { type LoginFormValues, loginSchema } from "@/lib/schemas/auth";
 
 export function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isRedirecting, startRedirectTransition] = useTransition();
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -28,8 +35,24 @@ export function LoginForm() {
     },
   });
 
-  const onSubmit = (values: LoginFormValues) => {
-    console.log("login form submitted", values);
+  const onSubmit = async (values: LoginFormValues) => {
+    const nextPath = searchParams.get("next") || "/dashboard";
+    const { error } = await authClient.signIn.email({
+      email: values.email,
+      password: values.password,
+    });
+
+    if (error) {
+      setError("root", {
+        message: error.message || "Unable to sign in with those credentials.",
+      });
+      return;
+    }
+
+    startRedirectTransition(() => {
+      router.push(nextPath);
+      router.refresh();
+    });
   };
 
   return (
@@ -74,11 +97,13 @@ export function LoginForm() {
           </Field>
         </FieldGroup>
 
+        <FieldError errors={[errors.root]} />
+
         <Button
           type="submit"
           size="lg"
           className="w-full"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isRedirecting}
         >
           Sign in
         </Button>

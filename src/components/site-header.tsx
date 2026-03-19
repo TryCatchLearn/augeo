@@ -1,6 +1,8 @@
 import { Gavel } from "lucide-react";
 import Link from "next/link";
 import { LinkButton } from "@/components/ui/button";
+import { UserNav } from "@/components/user-nav";
+import { getSession } from "@/lib/session";
 
 const navLinks = [
   {
@@ -9,7 +11,9 @@ const navLinks = [
   },
 ];
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const session = await getSession();
+
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
@@ -38,12 +42,20 @@ export function SiteHeader() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <LinkButton href="/login" variant="secondary">
-              Login
-            </LinkButton>
-            <LinkButton href="/register">Register</LinkButton>
-          </div>
+          {session ? (
+            <UserNav
+              name={session.user.name}
+              email={session.user.email}
+              image={session.user.image}
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <LinkButton href="/login" variant="secondary">
+                Login
+              </LinkButton>
+              <LinkButton href="/register">Register</LinkButton>
+            </div>
+          )}
         </div>
       </div>
     </header>
