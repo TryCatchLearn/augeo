@@ -1,5 +1,6 @@
 import { Gavel } from "lucide-react";
 import Link from "next/link";
+import { LinkButton } from "@/components/ui/button";
 
 const navLinks = [
   {
@@ -24,17 +25,26 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-6 text-sm font-medium">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex items-center gap-3">
+          <nav className="flex items-center gap-6 text-sm font-medium">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-2">
+            <LinkButton href="/login" variant="secondary">
+              Login
+            </LinkButton>
+            <LinkButton href="/register">Register</LinkButton>
+          </div>
+        </div>
       </div>
     </header>
   );
