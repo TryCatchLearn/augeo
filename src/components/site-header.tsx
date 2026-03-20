@@ -15,16 +15,16 @@ export async function SiteHeader() {
   const session = await getSession();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/72 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
         <Link
           href="/"
           className="flex items-center gap-3 transition-opacity hover:opacity-90"
         >
-          <span className="flex size-10 items-center justify-center rounded-full border border-border bg-card shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_20%,transparent)]">
+          <span className="flex size-10 items-center justify-center rounded-full border border-primary/25 bg-card shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_24%,transparent),0_0_22px_color-mix(in_oklab,var(--color-primary)_16%,transparent)]">
             <Gavel aria-hidden="true" className="size-5 text-primary" />
           </span>
-          <span className="text-lg font-semibold tracking-[0.18em] uppercase text-primary sm:text-xl">
+          <span className="text-lg font-semibold tracking-[0.26em] uppercase text-primary sm:text-xl">
             Augeo
           </span>
         </Link>
@@ -35,7 +35,7 @@ export async function SiteHeader() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="text-muted-foreground transition-colors hover:text-primary"
               >
                 {link.label}
               </Link>
