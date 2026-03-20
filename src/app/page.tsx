@@ -1,4 +1,15 @@
+import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
   return (
@@ -7,10 +18,13 @@ export default function Home() {
       <div className="relative mx-auto flex min-h-[calc(100vh-9rem)] w-full max-w-6xl items-center px-6 py-20 sm:py-24">
         <div className="grid w-full gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div className="max-w-2xl space-y-8">
-            <div className="inline-flex items-center rounded-full border border-border bg-card/80 px-4 py-2 text-sm text-muted-foreground">
+            <Badge
+              variant="outline"
+              className="rounded-full border-border bg-card/80 px-4 py-2 text-sm text-muted-foreground"
+            >
               Live soon: curated auctions for art, design, collectibles, and
               more
-            </div>
+            </Badge>
 
             <div className="space-y-5">
               <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl md:text-6xl">
@@ -33,41 +47,59 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-border bg-card/85 p-6 shadow-2xl shadow-black/10">
-            <div className="space-y-6">
-              <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Featured preview
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold">
-                    Mid-century walnut sideboard
-                  </h2>
-                </div>
-                <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
-                  Opening soon
-                </span>
-              </div>
+          <Card className="rounded-3xl border border-border bg-card/85 py-0 shadow-2xl shadow-black/10">
+            <CardHeader className="px-6 pt-6">
+              <CardDescription>Featured preview</CardDescription>
+              <CardTitle className="mt-2 text-2xl font-semibold">
+                Mid-century walnut sideboard
+              </CardTitle>
+              <CardAction>
+                <StatusBadge tone="openingSoon">Opening soon</StatusBadge>
+              </CardAction>
+            </CardHeader>
+
+            <CardContent className="px-6 pb-6">
+              <Separator className="mb-6" />
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-border bg-background/70 p-4">
-                  <p className="text-sm text-muted-foreground">Starting bid</p>
-                  <p className="mt-2 text-2xl font-semibold">$1,200</p>
-                </div>
-                <div className="rounded-2xl border border-border bg-background/70 p-4">
-                  <p className="text-sm text-muted-foreground">Auction opens</p>
-                  <p className="mt-2 text-2xl font-semibold">March 28</p>
-                </div>
+                <Card
+                  size="sm"
+                  className="rounded-2xl border border-border bg-background/70 py-0 ring-0"
+                >
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Starting bid
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold">$1,200</p>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  size="sm"
+                  className="rounded-2xl border border-border bg-background/70 py-0 ring-0"
+                >
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Auction opens
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold">March 28</p>
+                  </CardContent>
+                </Card>
               </div>
 
-              <div className="rounded-2xl border border-dashed border-border p-5">
-                <p className="text-sm leading-7 text-muted-foreground">
-                  Thoughtful photography, transparent reserve details, and
-                  bidding windows designed to feel focused instead of frantic.
-                </p>
-              </div>
-            </div>
-          </div>
+              <Card
+                size="sm"
+                className="mt-4 rounded-2xl border border-dashed border-border bg-transparent py-0 ring-0"
+              >
+                <CardContent className="p-5">
+                  <p className="text-sm leading-7 text-muted-foreground">
+                    Thoughtful photography, transparent reserve details, and
+                    bidding windows designed to feel focused instead of frantic.
+                  </p>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </section>

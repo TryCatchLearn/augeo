@@ -1,22 +1,27 @@
+import { StatusBadge } from "@/components/status-badge";
 import { LinkButton } from "@/components/ui/button";
+import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 const placeholderListings = [
   {
     title: "Vintage brass desk lamp",
     category: "Design",
     status: "Preview",
+    tone: "preview",
   },
   {
     title: "Signed abstract lithograph",
     category: "Art",
     status: "Coming soon",
+    tone: "comingSoon",
   },
   {
     title: "Rare mechanical wristwatch",
     category: "Collectibles",
     status: "Coming soon",
+    tone: "comingSoon",
   },
-];
+] as const;
 
 export default function ListingsPage() {
   return (
@@ -37,16 +42,22 @@ export default function ListingsPage() {
 
       <div className="mt-10 grid gap-4 md:grid-cols-3">
         {placeholderListings.map((listing) => (
-          <article
+          <Card
             key={listing.title}
-            className="rounded-3xl border border-border bg-card p-6"
+            className="rounded-3xl border border-border py-0"
           >
-            <p className="text-sm text-muted-foreground">{listing.category}</p>
-            <h2 className="mt-3 text-xl font-semibold">{listing.title}</h2>
-            <p className="mt-6 inline-flex rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground">
-              {listing.status}
-            </p>
-          </article>
+            <CardHeader className="px-6 pt-6">
+              <p className="text-sm text-muted-foreground">
+                {listing.category}
+              </p>
+              <CardTitle className="mt-3 text-xl font-semibold">
+                {listing.title}
+              </CardTitle>
+            </CardHeader>
+            <CardFooter className="border-t-0 bg-transparent px-6 pb-6 pt-0">
+              <StatusBadge tone={listing.tone}>{listing.status}</StatusBadge>
+            </CardFooter>
+          </Card>
         ))}
       </div>
 

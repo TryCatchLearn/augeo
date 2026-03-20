@@ -4,6 +4,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -36,8 +37,8 @@ export function AuthFormShell({
             {description}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          {children}
+        <CardContent className="pt-6">{children}</CardContent>
+        <CardFooter className="justify-center border-t-0 bg-transparent pt-0">
           <p className="text-center text-sm text-muted-foreground">
             {footerText}{" "}
             <Link
@@ -47,7 +48,7 @@ export function AuthFormShell({
               {footerLinkLabel}
             </Link>
           </p>
-        </CardContent>
+        </CardFooter>
       </Card>
     </section>
   );

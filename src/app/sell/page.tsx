@@ -1,3 +1,4 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/session";
 
 export default async function SellPage() {
@@ -18,11 +19,17 @@ export default async function SellPage() {
         </p>
       </div>
 
-      <div className="mt-10 rounded-3xl border border-border bg-card p-6">
-        <p className="text-sm text-muted-foreground">Signed in as</p>
-        <p className="mt-2 text-2xl font-semibold">{session.user.name}</p>
-        <p className="mt-2 text-muted-foreground">{session.user.email}</p>
-      </div>
+      <Card className="mt-10 rounded-3xl border border-border py-0">
+        <CardHeader className="px-6 pt-6">
+          <p className="text-sm text-muted-foreground">Signed in as</p>
+          <CardTitle className="mt-2 text-2xl font-semibold">
+            {session.user.name}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          <p className="text-muted-foreground">{session.user.email}</p>
+        </CardContent>
+      </Card>
     </section>
   );
 }
