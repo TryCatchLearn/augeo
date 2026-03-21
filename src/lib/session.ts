@@ -22,3 +22,5 @@ export async function requireSession(redirectTo?: string) {
 
   return session;
 }
+
+export type AppSession = NonNullable<Awaited<ReturnType<typeof getSession>>>;

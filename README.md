@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Augeo
+
+Augeo is a Next.js 16 auction marketplace prototype built with TypeScript, BetterAuth, Drizzle ORM, and Tailwind CSS v4.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies, then start the development server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run test:run
+npm run test:unit
+npm run test:integration
+npm run test:coverage
+```
 
-## Learn More
+Run a single test file with:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run test:run -- tests/integration/db/test-database.test.ts
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Testing Conventions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `tests/unit/` holds pure unit tests for helpers, schemas, and domain rules.
+- `tests/integration/` holds DB-backed and app-surface integration tests.
+- `tests/helpers/` contains reusable harness code such as temp DB setup, session helpers, time helpers, and mock adapters.
+- `tests/factories/` contains data factories for seeded records.
 
-## Deploy on Vercel
+DB-backed integration tests use a temporary SQLite database file per test harness. The harness applies the checked-in Drizzle migrations from `drizzle/` before each suite interacts with the database, so integration tests exercise the real schema shape instead of mock tables.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Coverage is reported through Vitest with 80% thresholds applied to the shared `src/lib/` and `src/features/` code that Phase 0 establishes as the main home for domain logic and reusable server-side helpers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Commands
+
+```bash
+npm run lint
+npm run build
+npm run format
+```
