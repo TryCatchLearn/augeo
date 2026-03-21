@@ -4,10 +4,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema";
 import { insertUser } from "../../factories/user";
-import {
-  createTestDatabase,
-  type TestDatabase,
-} from "../../helpers/test-database";
+import { createTestDatabase, type TestDatabase } from "../../helpers/database";
 
 describe("test database harness", () => {
   let testDatabase: TestDatabase | undefined;

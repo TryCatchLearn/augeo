@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requireSession } from "@/lib/session";
+import { requireSession } from "@/features/auth/session";
 
 export default async function SellPage() {
   const session = await requireSession("/sell");

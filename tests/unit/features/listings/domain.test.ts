@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canReceiveBids,
-  canReturnToDraft,
-} from "@/features/auctions/domain/listing-status";
+import { canReceiveBids, canReturnToDraft } from "@/features/listings/domain";
 
 describe("listing status rules", () => {
   it("allows bids only for active listings that have not ended", () => {

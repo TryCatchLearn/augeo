@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AppSession } from "@/lib/session";
+import type { AppSession } from "@/features/auth/session";
 
 export function createMockSession(overrides?: Partial<AppSession>): AppSession {
   const now = new Date("2026-03-21T00:00:00.000Z");

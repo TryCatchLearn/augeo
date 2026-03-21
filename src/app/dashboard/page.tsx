@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { requireSession } from "@/lib/session";
+import { requireSession } from "@/features/auth/session";
 
 export default async function DashboardPage() {
   const session = await requireSession("/dashboard");

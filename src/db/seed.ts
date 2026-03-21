@@ -1,8 +1,8 @@
 import { config as loadEnv } from "dotenv";
 import { and, eq, inArray } from "drizzle-orm";
+import { db } from "@/db/client";
 import { account, session, user } from "@/db/schema";
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { auth } from "@/server/auth";
 
 loadEnv({ path: ".env.local" });
 loadEnv();

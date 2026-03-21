@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { AuthFormShell } from "@/components/auth/auth-form-shell";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -15,8 +14,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { authClient } from "@/lib/auth-client";
-import { type RegisterFormValues, registerSchema } from "@/lib/schemas/auth";
+import { authClient } from "@/features/auth/client";
+import { AuthFormShell } from "@/features/auth/components/auth-form-shell";
+import {
+  type RegisterFormValues,
+  registerSchema,
+} from "@/features/auth/schema";
 
 export function RegisterForm() {
   const router = useRouter();

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { auth } from "@/lib/auth";
+import { auth } from "@/server/auth";
 
 export const getSession = cache(async () => {
   const requestHeaders = new Headers(await headers());

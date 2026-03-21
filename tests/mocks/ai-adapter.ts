@@ -1,7 +1,4 @@
-import type {
-  AiAdapter,
-  GenerateStructuredObjectOptions,
-} from "@/features/shared/ai/ai-adapter";
+import type { AiAdapter, GenerateStructuredObjectOptions } from "@/server/ai";
 
 export class MockAiAdapter implements AiAdapter {
   calls: GenerateStructuredObjectOptions[] = [];

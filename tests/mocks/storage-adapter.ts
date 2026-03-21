@@ -3,7 +3,7 @@ import type {
   StorageAdapter,
   StorageUploadInput,
   StorageUploadResult,
-} from "@/features/shared/storage/storage-adapter";
+} from "@/server/storage";
 
 export class MockStorageAdapter implements StorageAdapter {
   uploads: StorageUploadInput[] = [];

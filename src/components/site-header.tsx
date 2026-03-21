@@ -2,7 +2,7 @@ import { Gavel } from "lucide-react";
 import Link from "next/link";
 import { LinkButton } from "@/components/ui/button";
 import { UserNav } from "@/components/user-nav";
-import { getSession } from "@/lib/session";
+import { getSession } from "@/features/auth/session";
 
 const navLinks = [
   {

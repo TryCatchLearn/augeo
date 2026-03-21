@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createMockSession } from "../../helpers/session";
+import { createMockSession } from "../../../helpers/auth/session";
 
 const mockGetSession = vi.fn();
 const mockRedirect = vi.fn();
@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
   redirect: mockRedirect,
 }));
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/server/auth", () => ({
   auth: {
     api: {
       getSession: mockGetSession,
@@ -33,7 +33,7 @@ describe("session helpers", () => {
 
     mockGetSession.mockResolvedValue(session);
 
-    const { getSession } = await import("@/lib/session");
+    const { getSession } = await import("@/features/auth/session");
 
     await expect(getSession()).resolves.toEqual(session);
     expect(mockGetSession).toHaveBeenCalledWith({
@@ -44,7 +44,7 @@ describe("session helpers", () => {
   it("redirects anonymous users to login with the next path", async () => {
     mockGetSession.mockResolvedValue(null);
 
-    const { requireSession } = await import("@/lib/session");
+    const { requireSession } = await import("@/features/auth/session");
 
     await requireSession("/sell");
 

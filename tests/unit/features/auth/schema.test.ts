@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import { loginSchema, registerSchema } from "@/lib/schemas/auth";
+import { loginSchema, registerSchema } from "@/features/auth/schema";
 
 describe("auth schemas", () => {
   it("accepts valid login values", () => {
