@@ -300,67 +300,47 @@ Objective: establish the quality harness and project primitives required for all
 
 ## Phase 1 - Listing Creation and Management
 
-Objective: let authenticated sellers create and manage auction listings with photos and core auction configuration.
+Objective: deliver the first complete seller listing flow, including schema, seeded listing data, public and seller listing pages, signed Cloudinary image upload, seller-only draft management, and listing detail views that are ready for later bidding work.
 
-### Scope
+Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
-- Create listing form on `/sell`.
-- Support photo upload with one main image and optional additional gallery images.
-- Fields: title, description, category, condition, starting bid, optional reserve price, optional start date, required end date.
-- Allow sellers to save incomplete listings as drafts and publish them later.
-- Allow sellers to edit only their own draft listings.
-- Allow sellers to view their own listing summary and current auction state.
+### Sub-Phases
 
-### Validation Rules
+- `1A` Schema, seed data, `/listings`, and `/dashboard/listings`
+- `1B` `/sell` create listing page with signed Cloudinary upload
+- `1C` `/listings/[id]` display and draft visibility rules
+- `1D` Seller controls and draft edit modal on `/listings/[id]`
+- `1E` Additional seller image upload and thumbnail management
 
-- Title required, trimmed, and length-limited.
-- Description required with sensible min/max length.
-- Category and condition required from controlled enums.
-- Starting bid required, integer cents, minimum value greater than zero.
-- Reserve price optional, but if provided must be greater than or equal to the starting bid.
-- Start date optional; if omitted, the listing becomes active immediately when published.
-- If `startsAt` is provided, it must be earlier than `endsAt`.
-- End date required, defaults to `now + 7 days`, and must be in the future.
-- At least one listing photo required for publish-ready listings.
+### Phase 1 Decisions
 
-### Data and Backend Work
-
-- Add `listing` and `listingImage` tables and relations.
-- Add seller-owned server actions for create, update, publish, and return-to-draft when allowed.
-- Add Cloudinary-backed storage adapter contract for image upload/delete.
-- Add authorization checks so only owners can edit their own listings.
-- Add state transition rules for draft, scheduled, active, and ended listings.
-
-### UI Work
-
-- Replace the `/sell` placeholder with a production-like form flow.
-- Use React Hook Form with Zod schema validation.
-- Include upload preview state and clear validation messaging.
-- Add seller-facing listing confirmation or success view after creation.
+- Draft listing detail pages are owner-only and return not found for non-owners.
+- Phase 1 does not add the `bid` table; public listing cards and detail metadata show `startingBid` and `0 bids`.
+- Listing images use signed Cloudinary browser uploads plus persisted DB metadata and seller-owned deletion.
+- The first uploaded image creates a publish-ready draft using deterministic fake defaults that Phase 2 can later replace with AI output.
+- `/sell` uses a strict two-panel no-overflow desktop/tablet layout and stacks on narrow screens.
+- Listings are capped at `5` total images, and the last remaining image cannot be deleted.
 
 ### Acceptance Criteria
 
-- Authenticated seller can create a listing draft with one or more photos.
-- A seller can publish a draft so it becomes `active` immediately when `startsAt` is absent and `scheduled` when `startsAt` is in the future.
-- Seller can edit allowed fields only while the listing is in `draft`.
-- A seller can return a listing to `draft` only when it is `scheduled` or `active` and has no bids.
-- Invalid form submissions are blocked with field-level feedback.
-- Listing data persists correctly in SQLite via Drizzle.
-- Images are stored in Cloudinary and metadata persists in the DB.
-
-### Test Requirements
-
-- Unit tests for listing schemas, value parsing, enum validation, state transition rules, and authorization helpers.
-- Integration tests for create listing, edit listing, image metadata persistence, and invalid submission handling.
-- 100% integration coverage for listing creation happy path and business-rule failures.
+- Public `/listings` shows non-draft listings from the database with status-aware cards.
+- Protected `/dashboard/listings` shows the current user's listings with tabs for `Drafts`, `Active`, `Scheduled`, and `Ended`.
+- `/sell` supports local preview, signed Cloudinary upload with progress, draft creation, and redirect to `/listings/[id]`.
+- `/listings/[id]` shows the requested read layout for public listings and owner-only draft listings.
+- Sellers can save draft edits, publish drafts, return eligible listings to draft, delete draft listings, and manage up to `5` images.
+- Listing and listing-image data persist correctly in SQLite via Drizzle, and Cloudinary assets are removed on destructive seller actions.
+- Unit and integration coverage are added for the new schema, seller rules, page access rules, and image-management flows.
 
 ### Phase 1 Tracker
 
 - [ ] Detailed phase spec approved
-- [ ] Listing schema finalized
-- [ ] Storage adapter finalized
-- [ ] Create/edit listing flows implemented
-- [ ] Listing management UI implemented
+- [ ] `tasks/TODO.md` execution plan finalized
+- [ ] Listing schema and migration finalized
+- [ ] Signed Cloudinary upload flow finalized
+- [ ] `/listings` and `/dashboard/listings` implemented
+- [ ] `/sell` listing creation flow implemented
+- [ ] `/listings/[id]` display and seller controls implemented
+- [ ] Image management flows implemented
 - [ ] Unit tests completed
 - [ ] Integration tests completed
 - [ ] 80%+ coverage met
