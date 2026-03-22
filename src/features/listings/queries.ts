@@ -15,6 +15,21 @@ export type ListingCardData = {
   imageUrl: string | null;
 };
 
+export type ListingDetailData = {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  title: string;
+  description: string;
+  location: string;
+  category: string;
+  condition: string;
+  status: "draft" | "scheduled" | "active" | "ended";
+  startingBidCents: number;
+  endsAt: Date;
+  imageUrl: string | null;
+};
+
 type Database = LibSQLDatabase<typeof schema>;
 
 async function resolveDatabase(database?: Database) {
@@ -76,4 +91,39 @@ export async function listSellerListingCards(
     )
     .where(and(eq(listing.sellerId, sellerId), eq(listing.status, status)))
     .orderBy(desc(listing.updatedAt));
+}
+
+export async function getListingDetail(
+  listingId: string,
+  database?: Database,
+): Promise<ListingDetailData | null> {
+  const resolvedDatabase = await resolveDatabase(database);
+  const [result] = await resolvedDatabase
+    .select({
+      id: listing.id,
+      sellerId: listing.sellerId,
+      sellerName: user.name,
+      title: listing.title,
+      description: listing.description,
+      location: listing.location,
+      category: listing.category,
+      condition: listing.condition,
+      status: listing.status,
+      startingBidCents: listing.startingBidCents,
+      endsAt: listing.endsAt,
+      imageUrl: listingImage.url,
+    })
+    .from(listing)
+    .innerJoin(user, eq(listing.sellerId, user.id))
+    .leftJoin(
+      listingImage,
+      and(
+        eq(listingImage.listingId, listing.id),
+        eq(listingImage.isMain, true),
+      ),
+    )
+    .where(eq(listing.id, listingId))
+    .limit(1);
+
+  return result ?? null;
 }

@@ -80,10 +80,10 @@ describe("Dashboard listings page", () => {
       }),
     );
 
-    expect(screen.getByText("No scheduled listings yet")).toBeInTheDocument();
+    expect(screen.getByText("No listings yet")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Once this status has inventory for your account, the cards will appear here.",
+        "Listings will appear here once inventory is available.",
       ),
     ).toBeInTheDocument();
   });

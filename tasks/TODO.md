@@ -229,6 +229,8 @@ Status: Complete on 2026-03-22
 
 ## 1B - `/sell` Create Listing Page With Signed Cloudinary Upload
 
+Status: Complete on 2026-03-22
+
 ### Deliverables
 
 - `/sell` replaced with the two-panel listing creation layout.

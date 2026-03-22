@@ -21,7 +21,7 @@ export function ListingCard({ listing }: ListingCardProps) {
       className="group block focus-visible:outline-none"
     >
       <Card className="overflow-hidden rounded-3xl border border-border/90 py-0 transition-transform duration-250 ease-out group-hover:-translate-y-1 group-hover:border-primary/35 group-hover:shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_18%,transparent),0_24px_70px_rgba(0,0,0,0.34)] group-focus-visible:-translate-y-1 group-focus-visible:border-primary/35 group-focus-visible:shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_18%,transparent),0_24px_70px_rgba(0,0,0,0.34)]">
-        <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+        <div className="relative aspect-4/3 overflow-hidden bg-muted">
           {listing.imageUrl ? (
             <Image
               src={listing.imageUrl}

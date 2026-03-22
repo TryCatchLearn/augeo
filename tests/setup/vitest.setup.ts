@@ -1,3 +1,4 @@
+import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
 import { MockNextLink } from "../mocks/next-link";
 
@@ -14,6 +15,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   vi.unstubAllEnvs();
 });
