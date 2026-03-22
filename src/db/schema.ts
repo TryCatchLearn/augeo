@@ -1,5 +1,10 @@
 import { relations, sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  listingCategories,
+  listingConditions,
+  listingStatuses,
+} from "@/features/listings/domain";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -87,9 +92,61 @@ export const verification = sqliteTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const listing = sqliteTable(
+  "listing",
+  {
+    id: text("id").primaryKey(),
+    sellerId: text("seller_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    location: text("location").notNull(),
+    category: text("category", { enum: listingCategories }).notNull(),
+    condition: text("condition", { enum: listingConditions }).notNull(),
+    startingBidCents: integer("starting_bid_cents").notNull(),
+    reservePriceCents: integer("reserve_price_cents"),
+    startsAt: integer("starts_at", { mode: "timestamp_ms" }),
+    endsAt: integer("ends_at", { mode: "timestamp_ms" }).notNull(),
+    status: text("status", { enum: listingStatuses }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("listing_sellerId_idx").on(table.sellerId),
+    index("listing_status_idx").on(table.status),
+  ],
+);
+
+export const listingImage = sqliteTable(
+  "listing_image",
+  {
+    id: text("id").primaryKey(),
+    listingId: text("listing_id")
+      .notNull()
+      .references(() => listing.id, { onDelete: "cascade" }),
+    publicId: text("public_id").notNull(),
+    url: text("url").notNull(),
+    isMain: integer("is_main", { mode: "boolean" }).default(false).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    index("listing_image_listingId_idx").on(table.listingId),
+    index("listing_image_main_idx").on(table.listingId, table.isMain),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  listings: many(listing),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -103,5 +160,20 @@ export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
     references: [user.id],
+  }),
+}));
+
+export const listingRelations = relations(listing, ({ one, many }) => ({
+  seller: one(user, {
+    fields: [listing.sellerId],
+    references: [user.id],
+  }),
+  images: many(listingImage),
+}));
+
+export const listingImageRelations = relations(listingImage, ({ one }) => ({
+  listing: one(listing, {
+    fields: [listingImage.listingId],
+    references: [listing.id],
   }),
 }));

@@ -48,6 +48,7 @@
 }
 
 :root {
+  --app-header-height: 73px;
   --background: oklch(0.16 0.014 255);
   --foreground: oklch(0.95 0.015 220);
   --card: oklch(0.2 0.017 250);
@@ -148,6 +149,15 @@
   html {
     @apply font-sans;
   }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    overflow: hidden;
+  }
 }
 
 @layer utilities {
@@ -165,17 +175,52 @@
       );
     background-size: 72px 72px;
   }
+
+  .app-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--color-primary) 42%, transparent)
+      color-mix(in oklab, var(--color-background) 65%, black);
+  }
+
+  .app-scroll::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .app-scroll::-webkit-scrollbar-track {
+    background: color-mix(in oklab, var(--color-background) 72%, black);
+  }
+
+  .app-scroll::-webkit-scrollbar-thumb {
+    border: 2px solid color-mix(in oklab, var(--color-background) 72%, black);
+    border-radius: 999px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-primary) 64%, black),
+      color-mix(in oklab, var(--color-accent) 48%, black)
+    );
+  }
+
+  .route-shell {
+    position: relative;
+    z-index: 0;
+    min-height: 100%;
+    overflow: clip;
+    isolation: isolate;
+    contain: layout paint;
+  }
 }
 
 ::view-transition-group(.route-crossfade) {
   animation-duration: 220ms;
   animation-timing-function: ease;
+  z-index: 1;
 }
 
 ::view-transition-old(.route-crossfade),
 ::view-transition-new(.route-crossfade) {
   animation-duration: 220ms;
   animation-timing-function: ease;
+  z-index: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

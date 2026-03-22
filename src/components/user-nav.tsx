@@ -1,6 +1,12 @@
 "use client";
 
-import { ChevronDown, LayoutDashboard, LogOut, PlusCircle } from "lucide-react";
+import {
+  ChevronDown,
+  LayoutDashboard,
+  LogOut,
+  Package2,
+  PlusCircle,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Avatar } from "@/components/ui/avatar";
@@ -90,6 +96,14 @@ export function UserNav({ name, email, image }: UserNavProps) {
           >
             <LayoutDashboard className="size-4 text-primary" />
             My dashboard
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            className="gap-3 rounded-xl px-3 py-2.5"
+            onClick={() => router.push("/dashboard/listings")}
+          >
+            <Package2 className="size-4 text-primary" />
+            My listings
           </DropdownMenuItem>
         </DropdownMenuGroup>
 

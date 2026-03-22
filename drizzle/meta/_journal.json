@@ -8,6 +8,13 @@
       "when": 1773899256058,
       "tag": "0000_nasty_psylocke",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1774098815619,
+      "tag": "0001_flimsy_korvac",
+      "breakpoints": true
     }
   ]
 }

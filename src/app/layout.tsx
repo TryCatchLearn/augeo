@@ -27,12 +27,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} h-screen overflow-hidden antialiased`}
       >
-        <div className="flex min-h-screen flex-col bg-background">
+        <div className="flex h-screen flex-col bg-background">
           <SiteHeader />
-          <main className="flex-1">{children}</main>
-          <SiteFooter />
+          <main className="app-scroll relative z-0 flex min-h-0 flex-1 flex-col overflow-y-auto isolate">
+            <div className="flex-1">{children}</div>
+            <SiteFooter />
+          </main>
         </div>
       </body>
     </html>

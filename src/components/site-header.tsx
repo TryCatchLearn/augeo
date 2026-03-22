@@ -15,7 +15,7 @@ export async function SiteHeader() {
   const session = await getSession();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/72 backdrop-blur-xl">
+    <header className="sticky top-0 z-1000 isolate border-b border-border/70 bg-[color-mix(in_oklab,var(--color-background)_94%,black_6%)] shadow-[0_12px_38px_rgba(0,0,0,0.22)] backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
         <Link
           href="/"
