@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { listing, listingImage, user } from "@/db/schema";
 import {
+  getListingDetail,
+  getListingDetailForViewer,
   listPublicListingCards,
   listSellerListingCards,
 } from "@/features/listings/queries";
@@ -166,5 +168,111 @@ describe("listing queries", () => {
       status: "active",
       sellerName: "Seller One",
     });
+  });
+
+  it("returns public detail data with gallery images for non-draft listings", async () => {
+    const sellerId = randomUUID();
+    const listingId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values({
+      id: listingId,
+      sellerId,
+      title: "Public Camera",
+      description: "Visible listing",
+      location: "Portland, OR",
+      category: "electronics",
+      condition: "good",
+      startingBidCents: 25000,
+      reservePriceCents: null,
+      startsAt: null,
+      endsAt: new Date("2026-03-22T12:00:00.000Z"),
+      status: "active",
+    });
+
+    await testDatabase.db.insert(listingImage).values([
+      {
+        id: randomUUID(),
+        listingId,
+        publicId: "seed/public-camera-main",
+        url: "https://picsum.photos/seed/public-camera-main/1200/900",
+        isMain: true,
+      },
+      {
+        id: randomUUID(),
+        listingId,
+        publicId: "seed/public-camera-side",
+        url: "https://picsum.photos/seed/public-camera-side/1200/900",
+        isMain: false,
+      },
+    ]);
+
+    const detail = await getListingDetailForViewer(
+      listingId,
+      null,
+      testDatabase.db,
+    );
+
+    expect(detail).toMatchObject({
+      id: listingId,
+      title: "Public Camera",
+      sellerName: "Seller One",
+      status: "active",
+    });
+    expect(detail?.images).toHaveLength(2);
+    expect(detail?.images[0]?.isMain).toBe(true);
+  });
+
+  it("allows only the owner to read draft listings", async () => {
+    const sellerId = randomUUID();
+    const listingId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values({
+      id: listingId,
+      sellerId,
+      title: "Private Draft",
+      description: "Owner only listing",
+      location: "Austin, TX",
+      category: "other",
+      condition: "fair",
+      startingBidCents: 18000,
+      reservePriceCents: null,
+      startsAt: null,
+      endsAt: new Date("2026-03-22T12:00:00.000Z"),
+      status: "draft",
+    });
+
+    expect(
+      await getListingDetailForViewer(listingId, sellerId, testDatabase.db),
+    ).toMatchObject({
+      id: listingId,
+      status: "draft",
+    });
+
+    expect(
+      await getListingDetailForViewer(listingId, "other-user", testDatabase.db),
+    ).toBeNull();
+    expect(
+      await getListingDetailForViewer(listingId, null, testDatabase.db),
+    ).toBeNull();
+  });
+
+  it("returns null when the listing does not exist", async () => {
+    await expect(
+      getListingDetail(randomUUID(), testDatabase.db),
+    ).resolves.toBeNull();
   });
 });

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canReceiveBids,
   canReturnToDraft,
+  canViewListingDetail,
   formatTimeRemaining,
+  getListingTimeMeta,
+  getPlaceholderPricing,
   isListingStatus,
   listingConditions,
   listingStatuses,
@@ -47,6 +50,30 @@ describe("listing status rules", () => {
     expect(canReturnToDraft("active", 1)).toBe(false);
   });
 
+  it("keeps draft detail pages owner-only", () => {
+    expect(
+      canViewListingDetail({
+        sellerId: "seller-1",
+        viewerId: "seller-1",
+        status: "draft",
+      }),
+    ).toBe(true);
+    expect(
+      canViewListingDetail({
+        sellerId: "seller-1",
+        viewerId: "buyer-1",
+        status: "draft",
+      }),
+    ).toBe(false);
+    expect(
+      canViewListingDetail({
+        sellerId: "seller-1",
+        viewerId: null,
+        status: "active",
+      }),
+    ).toBe(true);
+  });
+
   it("formats time remaining for days, hours, minutes, and ended states", () => {
     const now = new Date("2026-03-21T12:00:00.000Z");
 
@@ -62,5 +89,41 @@ describe("listing status rules", () => {
     expect(formatTimeRemaining(new Date("2026-03-21T11:59:00.000Z"), now)).toBe(
       "Ended",
     );
+  });
+
+  it("returns Phase 1 placeholder pricing from the starting bid", () => {
+    expect(getPlaceholderPricing(27500)).toEqual({
+      currentBidCents: 27500,
+      minimumBidCents: 27500,
+      bidCount: 0,
+    });
+  });
+
+  it("returns status-aware time metadata for detail pages", () => {
+    const now = new Date("2026-03-21T12:00:00.000Z");
+
+    expect(
+      getListingTimeMeta(
+        "scheduled",
+        new Date("2026-03-25T12:00:00.000Z"),
+        new Date("2026-03-21T14:30:00.000Z"),
+        now,
+      ),
+    ).toEqual({
+      label: "Starts In",
+      value: "2h 30m left",
+    });
+
+    expect(
+      getListingTimeMeta(
+        "ended",
+        new Date("2026-03-21T11:59:00.000Z"),
+        null,
+        now,
+      ),
+    ).toEqual({
+      label: "Auction Ended",
+      value: "Ended",
+    });
   });
 });

@@ -293,6 +293,8 @@ Status: Complete on 2026-03-22
 
 ## 1C - `/listings/[id]` Display
 
+Status: Complete on 2026-03-22
+
 ### Deliverables
 
 - Listing detail page added with the requested top section and two-column layout.

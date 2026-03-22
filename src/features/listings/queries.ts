@@ -1,8 +1,11 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { listing, listingImage, user } from "@/db/schema";
-import type { ListingStatus } from "@/features/listings/domain";
+import {
+  canViewListingDetail,
+  type ListingStatus,
+} from "@/features/listings/domain";
 
 export type ListingCardData = {
   id: string;
@@ -26,8 +29,13 @@ export type ListingDetailData = {
   condition: string;
   status: "draft" | "scheduled" | "active" | "ended";
   startingBidCents: number;
+  startsAt: Date | null;
   endsAt: Date;
-  imageUrl: string | null;
+  images: Array<{
+    id: string;
+    url: string;
+    isMain: boolean;
+  }>;
 };
 
 type Database = LibSQLDatabase<typeof schema>;
@@ -98,7 +106,7 @@ export async function getListingDetail(
   database?: Database,
 ): Promise<ListingDetailData | null> {
   const resolvedDatabase = await resolveDatabase(database);
-  const [result] = await resolvedDatabase
+  const results = await resolvedDatabase
     .select({
       id: listing.id,
       sellerId: listing.sellerId,
@@ -110,20 +118,73 @@ export async function getListingDetail(
       condition: listing.condition,
       status: listing.status,
       startingBidCents: listing.startingBidCents,
+      startsAt: listing.startsAt,
       endsAt: listing.endsAt,
+      imageId: listingImage.id,
       imageUrl: listingImage.url,
+      imageIsMain: listingImage.isMain,
     })
     .from(listing)
     .innerJoin(user, eq(listing.sellerId, user.id))
-    .leftJoin(
-      listingImage,
-      and(
-        eq(listingImage.listingId, listing.id),
-        eq(listingImage.isMain, true),
-      ),
-    )
+    .leftJoin(listingImage, eq(listingImage.listingId, listing.id))
     .where(eq(listing.id, listingId))
-    .limit(1);
+    .orderBy(desc(listingImage.isMain), asc(listingImage.createdAt));
 
-  return result ?? null;
+  const [firstResult] = results;
+
+  if (!firstResult) {
+    return null;
+  }
+
+  return {
+    id: firstResult.id,
+    sellerId: firstResult.sellerId,
+    sellerName: firstResult.sellerName,
+    title: firstResult.title,
+    description: firstResult.description,
+    location: firstResult.location,
+    category: firstResult.category,
+    condition: firstResult.condition,
+    status: firstResult.status,
+    startingBidCents: firstResult.startingBidCents,
+    startsAt: firstResult.startsAt,
+    endsAt: firstResult.endsAt,
+    images: results.flatMap((result) => {
+      if (!result.imageId || !result.imageUrl) {
+        return [];
+      }
+
+      return [
+        {
+          id: result.imageId,
+          url: result.imageUrl,
+          isMain: Boolean(result.imageIsMain),
+        },
+      ];
+    }),
+  };
+}
+
+export async function getListingDetailForViewer(
+  listingId: string,
+  viewerId?: string | null,
+  database?: Database,
+) {
+  const result = await getListingDetail(listingId, database);
+
+  if (!result) {
+    return null;
+  }
+
+  if (
+    !canViewListingDetail({
+      sellerId: result.sellerId,
+      viewerId,
+      status: result.status,
+    })
+  ) {
+    return null;
+  }
+
+  return result;
 }

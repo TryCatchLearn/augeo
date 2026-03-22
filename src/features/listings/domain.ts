@@ -7,6 +7,12 @@ export const listingStatuses = [
 
 export type ListingStatus = (typeof listingStatuses)[number];
 
+export type ListingViewer = {
+  sellerId: string;
+  viewerId?: string | null;
+  status: ListingStatus;
+};
+
 export const listingCategories = [
   "electronics",
   "fashion",
@@ -55,6 +61,18 @@ export function canReturnToDraft(status: ListingStatus, bidCount: number) {
   return (status === "scheduled" || status === "active") && bidCount === 0;
 }
 
+export function canViewListingDetail({
+  sellerId,
+  viewerId,
+  status,
+}: ListingViewer) {
+  if (status !== "draft") {
+    return true;
+  }
+
+  return sellerId === viewerId;
+}
+
 export function formatListingPrice(cents: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -84,4 +102,31 @@ export function formatTimeRemaining(endsAt: Date, now = new Date()) {
   }
 
   return `${Math.max(minutes, 1)}m left`;
+}
+
+export function getPlaceholderPricing(startingBidCents: number) {
+  return {
+    currentBidCents: startingBidCents,
+    minimumBidCents: startingBidCents,
+    bidCount: 0,
+  };
+}
+
+export function getListingTimeMeta(
+  status: ListingStatus,
+  endsAt: Date,
+  startsAt?: Date | null,
+  now = new Date(),
+) {
+  if (status === "scheduled" && startsAt) {
+    return {
+      label: "Starts In",
+      value: formatTimeRemaining(startsAt, now),
+    };
+  }
+
+  return {
+    label: status === "ended" ? "Auction Ended" : "Time Remaining",
+    value: formatTimeRemaining(endsAt, now),
+  };
 }
