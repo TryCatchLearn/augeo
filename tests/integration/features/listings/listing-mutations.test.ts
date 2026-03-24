@@ -5,10 +5,13 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listing, listingImage, user } from "@/db/schema";
 import {
+  addListingImage,
   deleteDraftListing,
+  deleteListingImage,
   publishListing,
   returnListingToDraft,
   saveDraftListing,
+  setMainListingImage,
 } from "@/features/listings/mutations";
 import {
   createTestDatabase,
@@ -53,6 +56,30 @@ describe("listing mutations", () => {
     });
 
     return { sellerId, listingId };
+  }
+
+  async function seedDraftListingImages(listingId: string) {
+    const mainImageId = randomUUID();
+    const secondaryImageId = randomUUID();
+
+    await testDatabase.db.insert(listingImage).values([
+      {
+        id: mainImageId,
+        listingId,
+        publicId: "listing/cover",
+        url: "https://res.cloudinary.com/demo/image/upload/listing/cover.jpg",
+        isMain: true,
+      },
+      {
+        id: secondaryImageId,
+        listingId,
+        publicId: "listing/detail",
+        url: "https://res.cloudinary.com/demo/image/upload/listing/detail.jpg",
+        isMain: false,
+      },
+    ]);
+
+    return { mainImageId, secondaryImageId };
   }
 
   it("saves draft edits without changing the draft status", async () => {
@@ -157,22 +184,7 @@ describe("listing mutations", () => {
     const { sellerId, listingId } = await seedDraftListing();
     const deleteAssets = vi.fn().mockResolvedValue(undefined);
 
-    await testDatabase.db.insert(listingImage).values([
-      {
-        id: randomUUID(),
-        listingId,
-        publicId: "listing/cover",
-        url: "https://res.cloudinary.com/demo/image/upload/listing/cover.jpg",
-        isMain: true,
-      },
-      {
-        id: randomUUID(),
-        listingId,
-        publicId: "listing/detail",
-        url: "https://res.cloudinary.com/demo/image/upload/listing/detail.jpg",
-        isMain: false,
-      },
-    ]);
+    await seedDraftListingImages(listingId);
 
     await deleteDraftListing(
       {
@@ -199,5 +211,136 @@ describe("listing mutations", () => {
     ]);
     expect(remainingListings).toHaveLength(0);
     expect(remainingImages).toHaveLength(0);
+  });
+
+  it("adds an additional draft image until the five-image cap is reached", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    await seedDraftListingImages(listingId);
+
+    await addListingImage(
+      {
+        sellerId,
+        listingId,
+        uploadPublicId: "listing/extra",
+        uploadUrl:
+          "https://res.cloudinary.com/demo/image/upload/listing/extra.jpg",
+      },
+      testDatabase.db,
+    );
+
+    const images = await testDatabase.db
+      .select()
+      .from(listingImage)
+      .where(eq(listingImage.listingId, listingId));
+
+    expect(images).toHaveLength(3);
+    expect(images.some((image) => image.publicId === "listing/extra")).toBe(
+      true,
+    );
+  });
+
+  it("rejects additional image uploads after five images", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+
+    await testDatabase.db.insert(listingImage).values(
+      Array.from({ length: 5 }, (_, index) => ({
+        id: randomUUID(),
+        listingId,
+        publicId: `listing/${index}`,
+        url: `https://res.cloudinary.com/demo/image/upload/listing/${index}.jpg`,
+        isMain: index === 0,
+      })),
+    );
+
+    await expect(
+      addListingImage(
+        {
+          sellerId,
+          listingId,
+          uploadPublicId: "listing/overflow",
+          uploadUrl:
+            "https://res.cloudinary.com/demo/image/upload/listing/overflow.jpg",
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listings can include up to 5 images.");
+  });
+
+  it("switches the main image within a draft", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const { mainImageId, secondaryImageId } =
+      await seedDraftListingImages(listingId);
+
+    await setMainListingImage(
+      {
+        sellerId,
+        listingId,
+        imageId: secondaryImageId,
+      },
+      testDatabase.db,
+    );
+
+    const images = await testDatabase.db
+      .select()
+      .from(listingImage)
+      .where(eq(listingImage.listingId, listingId));
+
+    expect(images.find((image) => image.id === mainImageId)?.isMain).toBe(
+      false,
+    );
+    expect(images.find((image) => image.id === secondaryImageId)?.isMain).toBe(
+      true,
+    );
+  });
+
+  it("deletes a draft image and promotes another image when the main one is removed", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const { mainImageId, secondaryImageId } =
+      await seedDraftListingImages(listingId);
+    const deleteAssets = vi.fn().mockResolvedValue(undefined);
+
+    await deleteListingImage(
+      {
+        sellerId,
+        listingId,
+        imageId: mainImageId,
+        deleteAssets,
+      },
+      testDatabase.db,
+    );
+
+    const images = await testDatabase.db
+      .select()
+      .from(listingImage)
+      .where(eq(listingImage.listingId, listingId));
+
+    expect(deleteAssets).toHaveBeenCalledWith(["listing/cover"]);
+    expect(images).toHaveLength(1);
+    expect(images[0]?.id).toBe(secondaryImageId);
+    expect(images[0]?.isMain).toBe(true);
+  });
+
+  it("prevents deleting the final remaining image", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const imageId = randomUUID();
+
+    await testDatabase.db.insert(listingImage).values({
+      id: imageId,
+      listingId,
+      publicId: "listing/only",
+      url: "https://res.cloudinary.com/demo/image/upload/listing/only.jpg",
+      isMain: true,
+    });
+
+    await expect(
+      deleteListingImage(
+        {
+          sellerId,
+          listingId,
+          imageId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("The final listing image cannot be deleted.");
   });
 });

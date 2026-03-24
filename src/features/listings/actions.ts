@@ -4,14 +4,19 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/features/auth/session";
 import {
+  addListingImage,
   createDraftFromFirstUpload,
   deleteDraftListing,
+  deleteListingImage,
   publishListing,
   returnListingToDraft,
   saveDraftListing,
+  setMainListingImage,
 } from "@/features/listings/mutations";
 import {
+  addListingImageSchema,
   listingIdActionSchema,
+  listingImageActionSchema,
   saveDraftListingSchema,
 } from "@/features/listings/schema";
 
@@ -143,4 +148,77 @@ export async function deleteDraftListingAction(input: unknown) {
   revalidateListingPaths(result.id);
 
   return { listingId: result.id };
+}
+
+export async function addListingImageAction(input: unknown) {
+  const session = await getSession();
+
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  const parsedInput = addListingImageSchema.safeParse(input);
+
+  if (!parsedInput.success) {
+    throw new Error("Invalid add-image payload");
+  }
+
+  const result = await addListingImage({
+    listingId: parsedInput.data.listingId,
+    sellerId: session.user.id,
+    uploadPublicId: parsedInput.data.uploadPublicId,
+    uploadUrl: parsedInput.data.uploadUrl,
+  });
+
+  revalidateListingPaths(result.listingId);
+
+  return { listingId: result.listingId, imageId: result.id };
+}
+
+export async function setMainListingImageAction(input: unknown) {
+  const session = await getSession();
+
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  const parsedInput = listingImageActionSchema.safeParse(input);
+
+  if (!parsedInput.success) {
+    throw new Error("Invalid set-main payload");
+  }
+
+  const result = await setMainListingImage({
+    listingId: parsedInput.data.listingId,
+    imageId: parsedInput.data.imageId,
+    sellerId: session.user.id,
+  });
+
+  revalidateListingPaths(result.listingId);
+
+  return { listingId: result.listingId, imageId: result.id };
+}
+
+export async function deleteListingImageAction(input: unknown) {
+  const session = await getSession();
+
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  const parsedInput = listingImageActionSchema.safeParse(input);
+
+  if (!parsedInput.success) {
+    throw new Error("Invalid delete-image payload");
+  }
+
+  const result = await deleteListingImage({
+    listingId: parsedInput.data.listingId,
+    imageId: parsedInput.data.imageId,
+    sellerId: session.user.id,
+  });
+
+  revalidateListingPaths(result.listingId);
+
+  return { listingId: result.listingId, imageId: result.id };
 }

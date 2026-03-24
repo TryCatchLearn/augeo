@@ -4,6 +4,7 @@ import {
   type ListingCondition,
   listingCategories,
   listingConditions,
+  maxListingImageCount,
 } from "@/features/listings/domain";
 
 const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
@@ -127,6 +128,25 @@ export type SaveDraftListingInput = z.infer<typeof saveDraftListingSchema>;
 export const listingIdActionSchema = z.object({
   listingId: z.string().min(1),
 });
+
+export const listingImageActionSchema = z.object({
+  listingId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+
+export const addListingImageSchema = z.object({
+  listingId: z.string().min(1),
+  uploadPublicId: z.string().min(1),
+  uploadUrl: z.url(),
+});
+
+export function validateListingImageCount(imageCount: number) {
+  if (imageCount >= maxListingImageCount) {
+    throw new Error(
+      `Listings can include up to ${maxListingImageCount} images.`,
+    );
+  }
+}
 
 export function dollarsToCents(value: number) {
   return Math.round(value * 100);

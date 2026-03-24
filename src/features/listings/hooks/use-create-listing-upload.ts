@@ -3,64 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createDraftFromFirstUploadAction } from "@/features/listings/actions";
-
-export type UploadSignatureResponse = {
-  cloudName: string;
-  apiKey: string;
-  folder: string;
-  timestamp: number;
-  signature: string;
-};
+import {
+  requestListingImageUploadSignature,
+  uploadListingImageToCloudinary,
+} from "@/features/listings/upload";
 
 type UploadState = "idle" | "preview" | "uploading" | "processing";
-
-async function uploadToCloudinary(
-  file: File,
-  signedParams: UploadSignatureResponse,
-  onProgress: (percent: number) => void,
-) {
-  const formData = new FormData();
-
-  formData.set("file", file);
-  formData.set("api_key", signedParams.apiKey);
-  formData.set("folder", signedParams.folder);
-  formData.set("signature", signedParams.signature);
-  formData.set("timestamp", String(signedParams.timestamp));
-
-  const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${signedParams.cloudName}/image/upload`;
-
-  return new Promise<{ public_id: string; secure_url: string }>(
-    (resolve, reject) => {
-      const request = new XMLHttpRequest();
-
-      request.open("POST", cloudinaryUrl);
-      request.responseType = "json";
-
-      request.upload.addEventListener("progress", (event) => {
-        if (!event.lengthComputable) {
-          return;
-        }
-
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      });
-
-      request.addEventListener("load", () => {
-        if (request.status >= 200 && request.status < 300) {
-          resolve(request.response);
-          return;
-        }
-
-        reject(new Error("Image upload failed."));
-      });
-
-      request.addEventListener("error", () => {
-        reject(new Error("Image upload failed."));
-      });
-
-      request.send(formData);
-    },
-  );
-}
 
 export function useCreateListingUpload() {
   const router = useRouter();
@@ -100,24 +48,19 @@ export function useCreateListingUpload() {
 
     try {
       setErrorMessage(null);
+      setProgress(1);
       setUploadState("uploading");
 
-      const signatureResponse = await fetch("/api/upload-signature", {
-        method: "POST",
-      });
-
-      if (!signatureResponse.ok) {
-        throw new Error("Unable to prepare the image upload.");
-      }
-
-      const signedParams =
-        (await signatureResponse.json()) as UploadSignatureResponse;
-      const uploadResult = await uploadToCloudinary(
+      const signedParams = await requestListingImageUploadSignature();
+      const uploadResult = await uploadListingImageToCloudinary(
         file,
         signedParams,
-        setProgress,
+        (percent) => {
+          setProgress((currentProgress) => Math.max(currentProgress, percent));
+        },
       );
 
+      setProgress(100);
       setUploadState("processing");
 
       const { listingId } = await createDraftFromFirstUploadAction({

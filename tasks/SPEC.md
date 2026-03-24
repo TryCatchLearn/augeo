@@ -337,12 +337,12 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [ ] `tasks/TODO.md` execution plan finalized
 - [ ] Listing schema and migration finalized
 - [ ] Signed Cloudinary upload flow finalized
-- [ ] `/listings` and `/dashboard/listings` implemented
-- [ ] `/sell` listing creation flow implemented
-- [ ] `/listings/[id]` display and seller controls implemented
-- [ ] Image management flows implemented
-- [ ] Unit tests completed
-- [ ] Integration tests completed
+- [x] `/listings` and `/dashboard/listings` implemented
+- [x] `/sell` listing creation flow implemented
+- [x] `/listings/[id]` display and seller controls implemented
+- [x] Image management flows implemented
+- [x] Unit tests completed
+- [x] Integration tests completed
 - [ ] 80%+ coverage met
 - [ ] 100% critical-path integration coverage met
 - [ ] Phase accepted

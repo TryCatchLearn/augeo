@@ -133,6 +133,7 @@ describe("Listing detail page", () => {
     ).toHaveAttribute("href", "/listings/listing-1/edit");
     expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByText("Add More Images")).toBeInTheDocument();
   });
 
   it("shows only return-to-draft for scheduled sellers", async () => {

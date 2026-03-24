@@ -38,6 +38,13 @@ export const listingConditions = [
 
 export type ListingCondition = (typeof listingConditions)[number];
 
+export const maxListingImageCount = 5;
+
+export type ListingImageRecord = {
+  id: string;
+  isMain: boolean;
+};
+
 export const listingStatusLabels: Record<ListingStatus, string> = {
   draft: "Draft",
   scheduled: "Scheduled",
@@ -67,6 +74,31 @@ export function canPublishListing(status: ListingStatus) {
 
 export function canDeleteListing(status: ListingStatus) {
   return status === "draft";
+}
+
+export function canAddListingImage(imageCount: number) {
+  return imageCount < maxListingImageCount;
+}
+
+export function canDeleteListingImage(imageCount: number) {
+  return imageCount > 1;
+}
+
+export function getNextMainImageIdAfterDelete(
+  images: readonly ListingImageRecord[],
+  deletedImageId: string,
+) {
+  const deletedImage = images.find((image) => image.id === deletedImageId);
+
+  if (!deletedImage) {
+    return null;
+  }
+
+  if (!deletedImage.isMain) {
+    return images.find((image) => image.isMain)?.id ?? null;
+  }
+
+  return images.find((image) => image.id !== deletedImageId)?.id ?? null;
 }
 
 export function getPublishedStatus(

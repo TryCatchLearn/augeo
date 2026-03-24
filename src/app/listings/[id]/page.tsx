@@ -3,6 +3,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession } from "@/features/auth/session";
 import { ListingImageGallery } from "@/features/listings/components/listing-image-gallery";
+import { ListingImageUploadPanel } from "@/features/listings/components/listing-image-upload-panel";
 import { ListingSellerControls } from "@/features/listings/components/listing-seller-controls";
 import {
   formatListingPrice,
@@ -29,6 +30,7 @@ export default async function ListingDetailPage({
   }
 
   const isOwner = session?.user.id === listing.sellerId;
+  const canManageImages = isOwner && listing.status === "draft";
   const pricing = getPlaceholderPricing(listing.startingBidCents);
   const timeMeta = getListingTimeMeta(
     listing.status,
@@ -82,6 +84,8 @@ export default async function ListingDetailPage({
         <Card className="rounded-[2rem] py-0">
           <CardContent className="space-y-6 px-6 py-6">
             <ListingImageGallery
+              listingId={listing.id}
+              canManage={canManageImages}
               title={listing.title}
               images={listing.images}
             />
@@ -132,46 +136,55 @@ export default async function ListingDetailPage({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2rem]">
-          <CardHeader className="px-6 pt-6">
-            <CardTitle className="text-xl">
-              {isOwner ? "Seller Controls" : "Place A Bid"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 px-6 pb-6">
-            {isOwner ? (
-              <ListingSellerControls listing={listing} />
-            ) : (
-              <>
-                <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                  <p className="text-sm leading-7 text-muted-foreground">
-                    Bidding is placeholder-only in Phase 1. Buyers can review
-                    the item, track the starting price, and get ready for the
-                    live controls in a later phase.
-                  </p>
-                </div>
-                <dl className="grid gap-3">
+        <div className="space-y-6">
+          <Card className="rounded-[2rem]">
+            <CardHeader className="px-6 pt-6">
+              <CardTitle className="text-xl">
+                {isOwner ? "Seller Controls" : "Place A Bid"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 px-6 pb-6">
+              {isOwner ? (
+                <ListingSellerControls listing={listing} />
+              ) : (
+                <>
                   <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                    <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                      Starting Bid
-                    </dt>
-                    <dd className="mt-2 text-lg font-semibold">
-                      {formatListingPrice(listing.startingBidCents)}
-                    </dd>
+                    <p className="text-sm leading-7 text-muted-foreground">
+                      Bidding is placeholder-only in Phase 1. Buyers can review
+                      the item, track the starting price, and get ready for the
+                      live controls in a later phase.
+                    </p>
                   </div>
-                  <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                    <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                      Bid Count
-                    </dt>
-                    <dd className="mt-2 text-lg font-semibold">
-                      {pricing.bidCount} bids
-                    </dd>
-                  </div>
-                </dl>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                  <dl className="grid gap-3">
+                    <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                      <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                        Starting Bid
+                      </dt>
+                      <dd className="mt-2 text-lg font-semibold">
+                        {formatListingPrice(listing.startingBidCents)}
+                      </dd>
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                      <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                        Bid Count
+                      </dt>
+                      <dd className="mt-2 text-lg font-semibold">
+                        {pricing.bidCount} bids
+                      </dd>
+                    </div>
+                  </dl>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {canManageImages ? (
+            <ListingImageUploadPanel
+              listingId={listing.id}
+              imageCount={listing.images.length}
+            />
+          ) : null}
+        </div>
       </div>
     </section>
   );

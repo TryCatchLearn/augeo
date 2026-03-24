@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  canAddListingImage,
   canDeleteListing,
+  canDeleteListingImage,
   canPublishListing,
   canReceiveBids,
   canReturnToDraft,
   canViewListingDetail,
   formatTimeRemaining,
   getListingTimeMeta,
+  getNextMainImageIdAfterDelete,
   getPlaceholderPricing,
   getPublishedStatus,
   isListingStatus,
@@ -58,6 +61,38 @@ describe("listing status rules", () => {
     expect(canPublishListing("active")).toBe(false);
     expect(canDeleteListing("draft")).toBe(true);
     expect(canDeleteListing("ended")).toBe(false);
+  });
+
+  it("enforces the image cap and last-image delete rule", () => {
+    expect(canAddListingImage(0)).toBe(true);
+    expect(canAddListingImage(4)).toBe(true);
+    expect(canAddListingImage(5)).toBe(false);
+
+    expect(canDeleteListingImage(3)).toBe(true);
+    expect(canDeleteListingImage(1)).toBe(false);
+  });
+
+  it("chooses the next main image when deleting the current cover image", () => {
+    expect(
+      getNextMainImageIdAfterDelete(
+        [
+          { id: "image-1", isMain: true },
+          { id: "image-2", isMain: false },
+          { id: "image-3", isMain: false },
+        ],
+        "image-1",
+      ),
+    ).toBe("image-2");
+
+    expect(
+      getNextMainImageIdAfterDelete(
+        [
+          { id: "image-1", isMain: true },
+          { id: "image-2", isMain: false },
+        ],
+        "image-2",
+      ),
+    ).toBe("image-1");
   });
 
   it("chooses active or scheduled when publishing a draft", () => {

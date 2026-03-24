@@ -8,9 +8,12 @@ import type {
   ListingCondition,
 } from "@/features/listings/domain";
 import {
+  canAddListingImage,
   canDeleteListing,
+  canDeleteListingImage,
   canPublishListing,
   canReturnToDraft,
+  getNextMainImageIdAfterDelete,
   getPublishedStatus,
 } from "@/features/listings/domain";
 import type { SaveDraftListingInput } from "@/features/listings/schema";
@@ -287,4 +290,161 @@ export async function deleteDraftListing(
   });
 
   return { id: input.listingId };
+}
+
+export async function addListingImage(
+  input: {
+    listingId: string;
+    sellerId: string;
+    uploadPublicId: string;
+    uploadUrl: string;
+  },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing image cannot be added.");
+  }
+
+  const images = await resolvedDatabase
+    .select({
+      id: listingImage.id,
+    })
+    .from(listingImage)
+    .where(eq(listingImage.listingId, input.listingId));
+
+  if (!canAddListingImage(images.length)) {
+    throw new Error("Listings can include up to 5 images.");
+  }
+
+  const imageId = randomUUID();
+
+  await resolvedDatabase.insert(listingImage).values({
+    id: imageId,
+    listingId: input.listingId,
+    publicId: input.uploadPublicId,
+    url: input.uploadUrl,
+    isMain: images.length === 0,
+  });
+
+  return { id: imageId, listingId: input.listingId };
+}
+
+export async function setMainListingImage(
+  input: {
+    listingId: string;
+    imageId: string;
+    sellerId: string;
+  },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing main image cannot be updated.");
+  }
+
+  const [targetImage] = await resolvedDatabase
+    .select({
+      id: listingImage.id,
+    })
+    .from(listingImage)
+    .where(
+      and(
+        eq(listingImage.id, input.imageId),
+        eq(listingImage.listingId, input.listingId),
+      ),
+    );
+
+  if (!targetImage) {
+    throw new Error("Listing image was not found.");
+  }
+
+  await resolvedDatabase.transaction(async (tx) => {
+    await tx
+      .update(listingImage)
+      .set({
+        isMain: false,
+      })
+      .where(eq(listingImage.listingId, input.listingId));
+
+    await tx
+      .update(listingImage)
+      .set({
+        isMain: true,
+      })
+      .where(eq(listingImage.id, input.imageId));
+  });
+
+  return { id: input.imageId, listingId: input.listingId };
+}
+
+export async function deleteListingImage(
+  input: {
+    listingId: string;
+    imageId: string;
+    sellerId: string;
+    deleteAssets?: (publicIds: string[]) => Promise<void>;
+  },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing image cannot be deleted.");
+  }
+
+  const images = await resolvedDatabase
+    .select({
+      id: listingImage.id,
+      publicId: listingImage.publicId,
+      isMain: listingImage.isMain,
+    })
+    .from(listingImage)
+    .where(eq(listingImage.listingId, input.listingId));
+
+  const targetImage = images.find((image) => image.id === input.imageId);
+
+  if (!targetImage) {
+    throw new Error("Listing image was not found.");
+  }
+
+  if (!canDeleteListingImage(images.length)) {
+    throw new Error("The final listing image cannot be deleted.");
+  }
+
+  const nextMainImageId = getNextMainImageIdAfterDelete(images, input.imageId);
+
+  await (input.deleteAssets ?? deleteCloudinaryAssets)([targetImage.publicId]);
+
+  await resolvedDatabase.transaction(async (tx) => {
+    await tx.delete(listingImage).where(eq(listingImage.id, input.imageId));
+
+    if (targetImage.isMain && nextMainImageId) {
+      await tx
+        .update(listingImage)
+        .set({
+          isMain: true,
+        })
+        .where(eq(listingImage.id, nextMainImageId));
+    }
+  });
+
+  return { id: input.imageId, listingId: input.listingId };
 }
