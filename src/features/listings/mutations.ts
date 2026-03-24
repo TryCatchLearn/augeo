@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { listing, listingImage } from "@/db/schema";
@@ -6,6 +7,14 @@ import type {
   ListingCategory,
   ListingCondition,
 } from "@/features/listings/domain";
+import {
+  canDeleteListing,
+  canPublishListing,
+  canReturnToDraft,
+  getPublishedStatus,
+} from "@/features/listings/domain";
+import type { SaveDraftListingInput } from "@/features/listings/schema";
+import { deleteCloudinaryAssets } from "@/server/cloudinary";
 
 type Database = LibSQLDatabase<typeof schema>;
 
@@ -136,4 +145,146 @@ export async function createDraftFromFirstUpload(
   });
 
   return { id: listingId };
+}
+
+async function getOwnedListing(
+  sellerId: string,
+  listingId: string,
+  database: Database,
+) {
+  const [record] = await database
+    .select()
+    .from(listing)
+    .where(and(eq(listing.id, listingId), eq(listing.sellerId, sellerId)));
+
+  return record ?? null;
+}
+
+export async function saveDraftListing(
+  input: SaveDraftListingInput & { sellerId: string },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing cannot be edited.");
+  }
+
+  await resolvedDatabase
+    .update(listing)
+    .set({
+      title: input.title,
+      description: input.description,
+      location: input.location,
+      category: input.category,
+      condition: input.condition,
+      startingBidCents: input.startingBidCents,
+      reservePriceCents: input.reservePriceCents,
+      startsAt: input.startsAt ? new Date(input.startsAt) : null,
+      endsAt: new Date(input.endsAt),
+    })
+    .where(eq(listing.id, input.listingId));
+
+  return { id: input.listingId };
+}
+
+export async function publishListing(
+  input: { listingId: string; sellerId: string; now?: Date },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || !canPublishListing(existingListing.status)) {
+    throw new Error("Listing cannot be published.");
+  }
+
+  const nextStatus = getPublishedStatus(
+    existingListing.startsAt,
+    input.now ?? new Date(),
+  );
+
+  await resolvedDatabase
+    .update(listing)
+    .set({
+      status: nextStatus,
+    })
+    .where(eq(listing.id, input.listingId));
+
+  return { id: input.listingId, status: nextStatus };
+}
+
+export async function returnListingToDraft(
+  input: { listingId: string; sellerId: string },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || !canReturnToDraft(existingListing.status, 0)) {
+    throw new Error("Listing cannot be returned to draft.");
+  }
+
+  await resolvedDatabase
+    .update(listing)
+    .set({
+      status: "draft",
+    })
+    .where(eq(listing.id, input.listingId));
+
+  return { id: input.listingId, status: "draft" as const };
+}
+
+export async function deleteDraftListing(
+  input: {
+    listingId: string;
+    sellerId: string;
+    deleteAssets?: (publicIds: string[]) => Promise<void>;
+  },
+  database?: Database,
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const existingListing = await getOwnedListing(
+    input.sellerId,
+    input.listingId,
+    resolvedDatabase,
+  );
+
+  if (!existingListing || !canDeleteListing(existingListing.status)) {
+    throw new Error("Listing cannot be deleted.");
+  }
+
+  const images = await resolvedDatabase
+    .select({
+      id: listingImage.id,
+      publicId: listingImage.publicId,
+    })
+    .from(listingImage)
+    .where(eq(listingImage.listingId, input.listingId));
+
+  await (input.deleteAssets ?? deleteCloudinaryAssets)(
+    images.map((image) => image.publicId),
+  );
+
+  await resolvedDatabase.transaction(async (tx) => {
+    await tx
+      .delete(listingImage)
+      .where(eq(listingImage.listingId, input.listingId));
+    await tx.delete(listing).where(eq(listing.id, input.listingId));
+  });
+
+  return { id: input.listingId };
 }

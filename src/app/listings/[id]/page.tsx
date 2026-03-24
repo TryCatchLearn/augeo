@@ -3,6 +3,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession } from "@/features/auth/session";
 import { ListingImageGallery } from "@/features/listings/components/listing-image-gallery";
+import { ListingSellerControls } from "@/features/listings/components/listing-seller-controls";
 import {
   formatListingPrice,
   getListingTimeMeta,
@@ -138,31 +139,37 @@ export default async function ListingDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 px-6 pb-6">
-            <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-              <p className="text-sm leading-7 text-muted-foreground">
-                {isOwner
-                  ? "Publishing, returning to draft, and image management land in the next phase. This space is reserved so seller actions stay anchored in a consistent spot."
-                  : "Bidding is placeholder-only in Phase 1. Buyers can review the item, track the starting price, and get ready for the live controls in a later phase."}
-              </p>
-            </div>
-            <dl className="grid gap-3">
-              <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                  Starting Bid
-                </dt>
-                <dd className="mt-2 text-lg font-semibold">
-                  {formatListingPrice(listing.startingBidCents)}
-                </dd>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                  Bid Count
-                </dt>
-                <dd className="mt-2 text-lg font-semibold">
-                  {pricing.bidCount} bids
-                </dd>
-              </div>
-            </dl>
+            {isOwner ? (
+              <ListingSellerControls listing={listing} />
+            ) : (
+              <>
+                <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                  <p className="text-sm leading-7 text-muted-foreground">
+                    Bidding is placeholder-only in Phase 1. Buyers can review
+                    the item, track the starting price, and get ready for the
+                    live controls in a later phase.
+                  </p>
+                </div>
+                <dl className="grid gap-3">
+                  <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                    <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                      Starting Bid
+                    </dt>
+                    <dd className="mt-2 text-lg font-semibold">
+                      {formatListingPrice(listing.startingBidCents)}
+                    </dd>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                    <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                      Bid Count
+                    </dt>
+                    <dd className="mt-2 text-lg font-semibold">
+                      {pricing.bidCount} bids
+                    </dd>
+                  </div>
+                </dl>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

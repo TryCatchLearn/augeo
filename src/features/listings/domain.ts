@@ -61,6 +61,25 @@ export function canReturnToDraft(status: ListingStatus, bidCount: number) {
   return (status === "scheduled" || status === "active") && bidCount === 0;
 }
 
+export function canPublishListing(status: ListingStatus) {
+  return status === "draft";
+}
+
+export function canDeleteListing(status: ListingStatus) {
+  return status === "draft";
+}
+
+export function getPublishedStatus(
+  startsAt: Date | null,
+  now = new Date(),
+): Extract<ListingStatus, "active" | "scheduled"> {
+  if (startsAt && startsAt.getTime() > now.getTime()) {
+    return "scheduled";
+  }
+
+  return "active";
+}
+
 export function canViewListingDetail({
   sellerId,
   viewerId,

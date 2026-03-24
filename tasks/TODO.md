@@ -1,7 +1,7 @@
 # Phase 1 Execution TODO
 
 Created: 2026-03-21
-Status: Phase `1A` complete
+Status: Phase `1D` complete
 
 ## Objective
 
@@ -344,6 +344,8 @@ Status: Complete on 2026-03-22
 - Gallery supports local thumbnail switching without server mutation.
 
 ## 1D - Listing Detail Seller Actions And Edit Modal
+
+Status: Complete on 2026-03-24
 
 ### Deliverables
 

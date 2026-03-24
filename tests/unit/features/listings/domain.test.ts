@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  canDeleteListing,
+  canPublishListing,
   canReceiveBids,
   canReturnToDraft,
   canViewListingDetail,
   formatTimeRemaining,
   getListingTimeMeta,
   getPlaceholderPricing,
+  getPublishedStatus,
   isListingStatus,
   listingConditions,
   listingStatuses,
@@ -48,6 +51,25 @@ describe("listing status rules", () => {
     expect(canReturnToDraft("active", 0)).toBe(true);
     expect(canReturnToDraft("draft", 0)).toBe(false);
     expect(canReturnToDraft("active", 1)).toBe(false);
+  });
+
+  it("limits publish and delete transitions to draft listings", () => {
+    expect(canPublishListing("draft")).toBe(true);
+    expect(canPublishListing("active")).toBe(false);
+    expect(canDeleteListing("draft")).toBe(true);
+    expect(canDeleteListing("ended")).toBe(false);
+  });
+
+  it("chooses active or scheduled when publishing a draft", () => {
+    const now = new Date("2026-03-21T12:00:00.000Z");
+
+    expect(getPublishedStatus(null, now)).toBe("active");
+    expect(getPublishedStatus(new Date("2026-03-21T11:00:00.000Z"), now)).toBe(
+      "active",
+    );
+    expect(getPublishedStatus(new Date("2026-03-21T13:00:00.000Z"), now)).toBe(
+      "scheduled",
+    );
   });
 
   it("keeps draft detail pages owner-only", () => {

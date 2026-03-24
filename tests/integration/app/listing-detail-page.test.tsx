@@ -5,6 +5,10 @@ import { createMockSession } from "../../helpers/auth/session";
 const hoisted = vi.hoisted(() => ({
   getSession: vi.fn(),
   getListingDetailForViewer: vi.fn(),
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    refresh: vi.fn(),
+  })),
   notFound: vi.fn(() => {
     throw new Error("not-found");
   }),
@@ -24,6 +28,7 @@ vi.mock("next/navigation", async () => {
 
   return {
     ...actual,
+    useRouter: hoisted.useRouter,
     notFound: hoisted.notFound,
   };
 });
@@ -42,6 +47,7 @@ describe("Listing detail page", () => {
       condition: "like_new",
       status: "active",
       startingBidCents: 45000,
+      reservePriceCents: null,
       startsAt: null,
       endsAt: new Date("2026-03-25T12:00:00.000Z"),
       images: [
@@ -107,6 +113,7 @@ describe("Listing detail page", () => {
       condition: "good",
       status: "draft",
       startingBidCents: 18000,
+      reservePriceCents: null,
       startsAt: null,
       endsAt: new Date("2026-03-25T12:00:00.000Z"),
       images: [],
@@ -122,8 +129,57 @@ describe("Listing detail page", () => {
 
     expect(screen.getByText("Seller Controls")).toBeInTheDocument();
     expect(
-      screen.getByText(/Publishing, returning to draft, and image management/),
+      screen.getByRole("link", { name: "Refine Listing" }),
+    ).toHaveAttribute("href", "/listings/listing-1/edit");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("shows only return-to-draft for scheduled sellers", async () => {
+    const session = createMockSession({
+      user: {
+        id: "seller-1",
+        name: "Seller One",
+        email: "seller-one@example.test",
+        emailVerified: true,
+        createdAt: new Date("2026-03-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-21T00:00:00.000Z"),
+        image: null,
+      },
+    });
+
+    hoisted.getSession.mockResolvedValue(session);
+    hoisted.getListingDetailForViewer.mockResolvedValue({
+      id: "listing-1",
+      sellerId: "seller-1",
+      sellerName: "Seller One",
+      title: "Scheduled Draft",
+      description: "Scheduled details",
+      location: "Austin, TX",
+      category: "other",
+      condition: "good",
+      status: "scheduled",
+      startingBidCents: 18000,
+      reservePriceCents: 22000,
+      startsAt: new Date("2026-03-26T12:00:00.000Z"),
+      endsAt: new Date("2026-03-27T12:00:00.000Z"),
+      images: [],
+    });
+
+    const { default: ListingDetailPage } = await import(
+      "@/app/listings/[id]/page"
+    );
+
+    render(
+      await ListingDetailPage({ params: Promise.resolve({ id: "listing-1" }) }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Return to Draft" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Publish" }),
+    ).not.toBeInTheDocument();
   });
 
   it("returns not found when the listing is unavailable to the viewer", async () => {

@@ -29,6 +29,7 @@ export type ListingDetailData = {
   condition: string;
   status: "draft" | "scheduled" | "active" | "ended";
   startingBidCents: number;
+  reservePriceCents: number | null;
   startsAt: Date | null;
   endsAt: Date;
   images: Array<{
@@ -118,6 +119,7 @@ export async function getListingDetail(
       condition: listing.condition,
       status: listing.status,
       startingBidCents: listing.startingBidCents,
+      reservePriceCents: listing.reservePriceCents,
       startsAt: listing.startsAt,
       endsAt: listing.endsAt,
       imageId: listingImage.id,
@@ -147,6 +149,7 @@ export async function getListingDetail(
     condition: firstResult.condition,
     status: firstResult.status,
     startingBidCents: firstResult.startingBidCents,
+    reservePriceCents: firstResult.reservePriceCents,
     startsAt: firstResult.startsAt,
     endsAt: firstResult.endsAt,
     images: results.flatMap((result) => {
