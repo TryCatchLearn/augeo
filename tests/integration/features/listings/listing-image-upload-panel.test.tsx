@@ -121,4 +121,27 @@ describe("ListingImageUploadPanel", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(hoisted.addListingImageAction).not.toHaveBeenCalled();
   });
+
+  it("supports drag-and-drop uploads and shows upload errors", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+    } as Response);
+
+    render(<ListingImageUploadPanel listingId="listing-1" imageCount={2} />);
+    const dropZone = screen.getByText("Drop an image here").closest("label");
+
+    if (!dropZone) {
+      throw new Error("Expected image upload drop zone");
+    }
+
+    fireEvent.drop(dropZone, {
+      dataTransfer: {
+        files: [new File(["extra"], "detail.jpg", { type: "image/jpeg" })],
+      },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to prepare the image upload.",
+    );
+  });
 });

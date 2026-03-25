@@ -15,8 +15,19 @@ export default defineConfig({
       enabled: false,
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/features/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"],
-      exclude: ["src/lib/auth-client.ts", "src/lib/auth.ts", "src/lib/db.ts"],
+      include: [
+        "src/app/**/*.{ts,tsx}",
+        "src/features/**/*.{ts,tsx}",
+        "src/lib/**/*.{ts,tsx}",
+        "src/server/**/*.{ts,tsx}",
+      ],
+      exclude: [
+        "src/app/favicon.ico",
+        "src/app/globals.css",
+        "src/lib/auth-client.ts",
+        "src/lib/auth.ts",
+        "src/lib/db.ts",
+      ],
       thresholds: {
         statements: 80,
         branches: 80,

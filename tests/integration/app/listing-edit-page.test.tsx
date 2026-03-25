@@ -129,4 +129,44 @@ describe("Listing edit page", () => {
       ListingEditPage({ params: Promise.resolve({ id: "listing-1" }) }),
     ).rejects.toThrow("not-found");
   });
+
+  it("returns not found for draft listings owned by another seller", async () => {
+    const session = createMockSession({
+      user: {
+        id: "seller-1",
+        name: "Seller One",
+        email: "seller-one@example.test",
+        emailVerified: true,
+        createdAt: new Date("2026-03-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-21T00:00:00.000Z"),
+        image: null,
+      },
+    });
+
+    hoisted.requireSession.mockResolvedValue(session);
+    hoisted.getListingDetailForViewer.mockResolvedValue({
+      id: "listing-1",
+      sellerId: "seller-2",
+      sellerName: "Seller Two",
+      title: "Other Seller Draft",
+      description: "Draft details",
+      location: "Austin, TX",
+      category: "other",
+      condition: "good",
+      status: "draft",
+      startingBidCents: 18000,
+      reservePriceCents: null,
+      startsAt: null,
+      endsAt: new Date("2026-03-25T12:00:00.000Z"),
+      images: [],
+    });
+
+    const { default: ListingEditPage } = await import(
+      "@/app/listings/[id]/edit/page"
+    );
+
+    await expect(
+      ListingEditPage({ params: Promise.resolve({ id: "listing-1" }) }),
+    ).rejects.toThrow("not-found");
+  });
 });

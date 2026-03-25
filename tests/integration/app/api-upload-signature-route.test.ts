@@ -44,4 +44,40 @@ describe("POST /api/upload-signature", () => {
 
     expect(response.status).toBe(401);
   });
+
+  it("returns signed upload parameters for authenticated requests", async () => {
+    hoisted.getSession.mockResolvedValue({
+      user: { id: "seller-1" },
+      session: { id: "session-1" },
+    });
+
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(1763611200000);
+
+    try {
+      const { POST } = await import("@/app/api/upload-signature/route");
+      const response = await POST(
+        new Request("http://localhost/api/upload-signature", {
+          method: "POST",
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        cloudName: "demo-cloud",
+        apiKey: "demo-key",
+        folder: "augeo/listings",
+        timestamp: 1763611200,
+        signature: "signed-demo-payload",
+      });
+      expect(hoisted.apiSignRequest).toHaveBeenCalledWith(
+        {
+          folder: "augeo/listings",
+          timestamp: 1763611200,
+        },
+        "demo-secret",
+      );
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
 });

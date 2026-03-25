@@ -122,6 +122,59 @@ describe("listing mutations", () => {
     );
   });
 
+  it("rejects editing listings owned by another seller", async () => {
+    const { listingId } = await seedDraftListing();
+
+    await expect(
+      saveDraftListing(
+        {
+          sellerId: randomUUID(),
+          listingId,
+          title: "Refined Camera",
+          description: "Updated description",
+          location: "Portland, OR",
+          category: "collectibles",
+          condition: "like_new",
+          startingBidCents: 22500,
+          reservePriceCents: 30000,
+          startsAt: null,
+          endsAt: "2026-03-30T12:00:00.000Z",
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be edited.");
+  });
+
+  it("rejects editing listings that are no longer drafts", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "active",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      saveDraftListing(
+        {
+          sellerId,
+          listingId,
+          title: "Refined Camera",
+          description: "Updated description",
+          location: "Portland, OR",
+          category: "collectibles",
+          condition: "like_new",
+          startingBidCents: 22500,
+          reservePriceCents: 30000,
+          startsAt: null,
+          endsAt: "2026-03-30T12:00:00.000Z",
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be edited.");
+  });
+
   it("publishes drafts immediately when no future start time exists", async () => {
     const { sellerId, listingId } = await seedDraftListing();
 
@@ -159,6 +212,47 @@ describe("listing mutations", () => {
     expect(result.status).toBe("scheduled");
   });
 
+  it("rejects publishing listings that are missing, not owned, or not drafts", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+
+    await expect(
+      publishListing(
+        {
+          sellerId: randomUUID(),
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be published.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "active",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      publishListing(
+        {
+          sellerId,
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be published.");
+
+    await expect(
+      publishListing(
+        {
+          sellerId,
+          listingId: randomUUID(),
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be published.");
+  });
+
   it("returns scheduled listings to draft", async () => {
     const { sellerId, listingId } = await seedDraftListing();
 
@@ -178,6 +272,47 @@ describe("listing mutations", () => {
     );
 
     expect(result.status).toBe("draft");
+  });
+
+  it("rejects invalid return-to-draft transitions", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+
+    await expect(
+      returnListingToDraft(
+        {
+          sellerId,
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be returned to draft.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "ended",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      returnListingToDraft(
+        {
+          sellerId,
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be returned to draft.");
+
+    await expect(
+      returnListingToDraft(
+        {
+          sellerId: randomUUID(),
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be returned to draft.");
   });
 
   it("deletes draft rows and removes cloud assets first", async () => {
@@ -211,6 +346,70 @@ describe("listing mutations", () => {
     ]);
     expect(remainingListings).toHaveLength(0);
     expect(remainingImages).toHaveLength(0);
+  });
+
+  it("rejects deleting listings that are not owned or not drafts", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+
+    await expect(
+      deleteDraftListing(
+        {
+          sellerId: randomUUID(),
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be deleted.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "active",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      deleteDraftListing(
+        {
+          sellerId,
+          listingId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing cannot be deleted.");
+  });
+
+  it("keeps draft rows intact when asset deletion fails", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const deleteAssets = vi
+      .fn()
+      .mockRejectedValue(new Error("Cloudinary failed."));
+
+    await seedDraftListingImages(listingId);
+
+    await expect(
+      deleteDraftListing(
+        {
+          sellerId,
+          listingId,
+          deleteAssets,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Cloudinary failed.");
+
+    expect(
+      await testDatabase.db
+        .select()
+        .from(listing)
+        .where(eq(listing.id, listingId)),
+    ).toHaveLength(1);
+    expect(
+      await testDatabase.db
+        .select()
+        .from(listingImage)
+        .where(eq(listingImage.listingId, listingId)),
+    ).toHaveLength(2);
   });
 
   it("adds an additional draft image until the five-image cap is reached", async () => {
@@ -266,6 +465,43 @@ describe("listing mutations", () => {
     ).rejects.toThrow("Listings can include up to 5 images.");
   });
 
+  it("rejects adding images to listings that are not owned or not drafts", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+
+    await expect(
+      addListingImage(
+        {
+          sellerId: randomUUID(),
+          listingId,
+          uploadPublicId: "listing/extra",
+          uploadUrl:
+            "https://res.cloudinary.com/demo/image/upload/listing/extra.jpg",
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing image cannot be added.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "scheduled",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      addListingImage(
+        {
+          sellerId,
+          listingId,
+          uploadPublicId: "listing/extra",
+          uploadUrl:
+            "https://res.cloudinary.com/demo/image/upload/listing/extra.jpg",
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing image cannot be added.");
+  });
+
   it("switches the main image within a draft", async () => {
     const { sellerId, listingId } = await seedDraftListing();
     const { mainImageId, secondaryImageId } =
@@ -291,6 +527,58 @@ describe("listing mutations", () => {
     expect(images.find((image) => image.id === secondaryImageId)?.isMain).toBe(
       true,
     );
+  });
+
+  it("rejects set-main when the listing is not owned, not a draft, or the image is missing", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    await seedDraftListingImages(listingId);
+
+    await expect(
+      setMainListingImage(
+        {
+          sellerId: randomUUID(),
+          listingId,
+          imageId: randomUUID(),
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing main image cannot be updated.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "active",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      setMainListingImage(
+        {
+          sellerId,
+          listingId,
+          imageId: randomUUID(),
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing main image cannot be updated.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "draft",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      setMainListingImage(
+        {
+          sellerId,
+          listingId,
+          imageId: randomUUID(),
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing image was not found.");
   });
 
   it("deletes a draft image and promotes another image when the main one is removed", async () => {
@@ -320,6 +608,33 @@ describe("listing mutations", () => {
     expect(images[0]?.isMain).toBe(true);
   });
 
+  it("deletes a non-main image without changing the current main image", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const { mainImageId, secondaryImageId } =
+      await seedDraftListingImages(listingId);
+    const deleteAssets = vi.fn().mockResolvedValue(undefined);
+
+    await deleteListingImage(
+      {
+        sellerId,
+        listingId,
+        imageId: secondaryImageId,
+        deleteAssets,
+      },
+      testDatabase.db,
+    );
+
+    const images = await testDatabase.db
+      .select()
+      .from(listingImage)
+      .where(eq(listingImage.listingId, listingId));
+
+    expect(deleteAssets).toHaveBeenCalledWith(["listing/detail"]);
+    expect(images).toHaveLength(1);
+    expect(images[0]?.id).toBe(mainImageId);
+    expect(images[0]?.isMain).toBe(true);
+  });
+
   it("prevents deleting the final remaining image", async () => {
     const { sellerId, listingId } = await seedDraftListing();
     const imageId = randomUUID();
@@ -342,5 +657,84 @@ describe("listing mutations", () => {
         testDatabase.db,
       ),
     ).rejects.toThrow("The final listing image cannot be deleted.");
+  });
+
+  it("rejects deleting images that are not owned, not drafts, or missing", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const { secondaryImageId } = await seedDraftListingImages(listingId);
+
+    await expect(
+      deleteListingImage(
+        {
+          sellerId: randomUUID(),
+          listingId,
+          imageId: secondaryImageId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing image cannot be deleted.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "active",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      deleteListingImage(
+        {
+          sellerId,
+          listingId,
+          imageId: secondaryImageId,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing image cannot be deleted.");
+
+    await testDatabase.db
+      .update(listing)
+      .set({
+        status: "draft",
+      })
+      .where(eq(listing.id, listingId));
+
+    await expect(
+      deleteListingImage(
+        {
+          sellerId,
+          listingId,
+          imageId: randomUUID(),
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Listing image was not found.");
+  });
+
+  it("keeps image rows intact when image asset deletion fails", async () => {
+    const { sellerId, listingId } = await seedDraftListing();
+    const { secondaryImageId } = await seedDraftListingImages(listingId);
+    const deleteAssets = vi
+      .fn()
+      .mockRejectedValue(new Error("Cloudinary failed."));
+
+    await expect(
+      deleteListingImage(
+        {
+          sellerId,
+          listingId,
+          imageId: secondaryImageId,
+          deleteAssets,
+        },
+        testDatabase.db,
+      ),
+    ).rejects.toThrow("Cloudinary failed.");
+
+    expect(
+      await testDatabase.db
+        .select()
+        .from(listingImage)
+        .where(eq(listingImage.listingId, listingId)),
+    ).toHaveLength(2);
   });
 });

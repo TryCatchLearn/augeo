@@ -160,4 +160,35 @@ describe("CreateListingUpload", () => {
       seed: "camera.jpg:6:cloudinary-public-id",
     });
   });
+
+  it("supports drag-and-drop selection and shows upload errors", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+    } as Response);
+
+    render(<CreateListingUpload />);
+    const dropZone = screen
+      .getByText("Drop your first photo here")
+      .closest("label");
+
+    if (!dropZone) {
+      throw new Error("Expected upload drop zone");
+    }
+
+    fireEvent.drop(dropZone, {
+      dataTransfer: {
+        files: [new File(["create"], "camera.jpg", { type: "image/jpeg" })],
+      },
+    });
+
+    expect(
+      await screen.findByAltText("Selected listing preview"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to prepare the image upload.",
+    );
+  });
 });

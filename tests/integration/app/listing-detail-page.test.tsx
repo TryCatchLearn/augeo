@@ -183,6 +183,102 @@ describe("Listing detail page", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the image upload panel only for seller-owned drafts", async () => {
+    const session = createMockSession({
+      user: {
+        id: "seller-1",
+        name: "Seller One",
+        email: "seller-one@example.test",
+        emailVerified: true,
+        createdAt: new Date("2026-03-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-21T00:00:00.000Z"),
+        image: null,
+      },
+    });
+
+    hoisted.getSession.mockResolvedValue(session);
+    hoisted.getListingDetailForViewer.mockResolvedValue({
+      id: "listing-1",
+      sellerId: "seller-1",
+      sellerName: "Seller One",
+      title: "Owner Draft",
+      description: "Draft details",
+      location: "Austin, TX",
+      category: "other",
+      condition: "good",
+      status: "draft",
+      startingBidCents: 18000,
+      reservePriceCents: null,
+      startsAt: null,
+      endsAt: new Date("2026-03-25T12:00:00.000Z"),
+      images: [
+        {
+          id: "image-1",
+          url: "https://picsum.photos/seed/camera-main/1200/900",
+          isMain: true,
+        },
+      ],
+    });
+
+    const { default: ListingDetailPage } = await import(
+      "@/app/listings/[id]/page"
+    );
+
+    render(
+      await ListingDetailPage({ params: Promise.resolve({ id: "listing-1" }) }),
+    );
+
+    expect(screen.getByText("Add More Images")).toBeInTheDocument();
+  });
+
+  it("hides seller actions and image management for ended listings", async () => {
+    const session = createMockSession({
+      user: {
+        id: "seller-1",
+        name: "Seller One",
+        email: "seller-one@example.test",
+        emailVerified: true,
+        createdAt: new Date("2026-03-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-21T00:00:00.000Z"),
+        image: null,
+      },
+    });
+
+    hoisted.getSession.mockResolvedValue(session);
+    hoisted.getListingDetailForViewer.mockResolvedValue({
+      id: "listing-1",
+      sellerId: "seller-1",
+      sellerName: "Seller One",
+      title: "Ended Listing",
+      description: "Ended details",
+      location: "Austin, TX",
+      category: "other",
+      condition: "good",
+      status: "ended",
+      startingBidCents: 18000,
+      reservePriceCents: null,
+      startsAt: null,
+      endsAt: new Date("2026-03-25T12:00:00.000Z"),
+      images: [],
+    });
+
+    const { default: ListingDetailPage } = await import(
+      "@/app/listings/[id]/page"
+    );
+
+    render(
+      await ListingDetailPage({ params: Promise.resolve({ id: "listing-1" }) }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Publish" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Return to Draft" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Add More Images")).not.toBeInTheDocument();
+  });
+
   it("returns not found when the listing is unavailable to the viewer", async () => {
     hoisted.getSession.mockResolvedValue(null);
     hoisted.getListingDetailForViewer.mockResolvedValue(null);
