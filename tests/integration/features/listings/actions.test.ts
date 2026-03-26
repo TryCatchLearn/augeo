@@ -72,7 +72,7 @@ describe("listing server actions", () => {
       createDraftFromFirstUploadAction({
         uploadPublicId: "image-1",
         uploadUrl: "https://example.com/image.jpg",
-        seed: "seed-1",
+        creationMode: "ai",
       }),
     ).rejects.toThrow("Unauthorized");
   });
@@ -85,29 +85,32 @@ describe("listing server actions", () => {
       createDraftFromFirstUploadAction({
         uploadPublicId: "",
         uploadUrl: "invalid-url",
-        seed: "",
+        creationMode: "ai",
       }),
     ).rejects.toThrow("Invalid draft payload");
   });
 
   it("creates a draft with the authenticated seller id", async () => {
     hoisted.getSession.mockResolvedValue(session);
-    hoisted.createDraftFromFirstUpload.mockResolvedValue({ id: "listing-1" });
+    hoisted.createDraftFromFirstUpload.mockResolvedValue({
+      id: "listing-1",
+      status: "created",
+    });
     const { createDraftFromFirstUploadAction } = await loadActions();
 
     await expect(
       createDraftFromFirstUploadAction({
         uploadPublicId: "image-1",
         uploadUrl: "https://example.com/image.jpg",
-        seed: "seed-1",
+        creationMode: "ai",
       }),
-    ).resolves.toEqual({ listingId: "listing-1" });
+    ).resolves.toEqual({ status: "created", listingId: "listing-1" });
 
     expect(hoisted.createDraftFromFirstUpload).toHaveBeenCalledWith({
       sellerId: "seller-1",
       uploadPublicId: "image-1",
       uploadUrl: "https://example.com/image.jpg",
-      seed: "seed-1",
+      creationMode: "ai",
     });
   });
 

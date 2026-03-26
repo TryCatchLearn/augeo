@@ -1,467 +1,344 @@
-# Phase 1 Execution TODO
+# Phase 2 Execution TODO
 
-Created: 2026-03-21
-Status: Phase `1E` complete
+Created: 2026-03-25
+Status: Planning complete, implementation pending
 
 ## Objective
 
-Deliver Phase 1 listing creation and management as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
+Deliver Phase 2 AI seller tooling as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
 
 ## Execution Order
 
-- `1A` blocks all later Phase 1 work.
-- `1B` depends on `1A`.
-- `1C` depends on `1A`.
-- `1D` depends on `1C`.
-- `1E` depends on `1B` and `1C`.
+- `2A` blocks all later Phase 2 work.
+- `2B` depends on `2A`.
 
 ## Locked Decisions
 
-- Draft listing detail pages are owner-only and return not found for non-owners.
-- Image cap is `5` total images per listing, including the first image uploaded from `/sell`.
-- Phase 1 does not add the `bid` table.
-- Public listing cards and listing detail metadata show `startingBid` and `0 bids`.
-- The first uploaded image creates a publish-ready draft using deterministic fake defaults.
-- `/sell` must be a strict two-panel, no-page-overflow layout on desktop and tablet, and may stack on narrow screens.
-- Deleting the last remaining image is not allowed.
-- `/dashboard/listings` defaults to the `Drafts` tab.
-- Date form inputs use browser-local `datetime-local` fields and persist UTC timestamps.
+- `tasks/TODO.md` is the active standalone execution document for Phase 2.
+- `tasks/SPEC.md` remains the concise phase summary and tracker.
+- Shared AI model policy for all Phase 2 features:
+  - primary: `google/gemini-2.5-flash-lite`
+  - fallback: `openai/gpt-4o-mini`
+- One user action equals one logical AI request.
+- Internal model fallback does not consume extra quota.
+- AI features use the Vercel AI SDK through Vercel AI Gateway.
+- Add `AI_GATEWAY_API_KEY` to `.env.example` during implementation.
+- Local development continues to read secrets from `.env.local`.
+- Shared AI logic stays server-only under `src/server/`.
+- Phase 2 does not persist prompts or raw model outputs in the database.
+- Add `listing.aiDescriptionGenerationCount` as `integer not null default 0`.
+- Smart Listing Creator is available only on `/sell`.
+- Smart Listing Creator input is the uploaded listing image only.
+- Smart Listing Creator does not use seller profile data, session-derived personalization, or other user context.
+- Smart Listing Creator generates:
+  - `title`
+  - `description`
+  - `category`
+  - `condition`
+  - `suggestedStartingPriceCents`
+- Smart Listing Creator never suggests reserve price.
+- Smart Listing Creator must save only existing category enum values.
+- Invalid or low-confidence category output resolves to `other`.
+- Smart Listing Creator success keeps the current redirect-to-detail flow after draft creation.
+- Smart Listing Creator failure after both models fail keeps the user on `/sell`.
+- Smart Listing Creator failure UI must offer:
+  - `Retry AI`
+  - `Continue without AI`
+- Manual non-AI fallback draft payload is locked to:
+  - `title`: `Untitled draft`
+  - `description`: `Add a seller-written description before publishing.`
+  - `location`: `Add location`
+  - `category`: `other`
+  - `condition`: `good`
+  - `startingBidCents`: `100`
+  - `reservePriceCents`: `null`
+  - `startsAt`: `null`
+  - `endsAt`: `now + 7 days`
+  - `status`: `draft`
+- The existing seed-based rich fake-default draft generation is removed from the main `/sell` success path.
+- AI Description Enhancer is available only to the draft owner on `/listings/[id]/edit`.
+- AI Description Enhancer tone options are:
+  - `concise`
+  - `max_hype`
+  - `sarcastic`
+  - `friendly`
+- AI Description Enhancer UI uses the existing `Select` primitive as a dropdown.
+- Default description-enhancer tone is `friendly`.
+- AI Description Enhancer streams text into an on-page preview panel.
+- AI Description Enhancer post-generation buttons are:
+  - `Regenerate`
+  - `Accept`
+  - `Cancel`
+- Description enhancement is capped at `10` total user-initiated AI runs per listing.
+- The initial generate counts toward the limit.
+- Every regenerate counts toward the limit.
+- Changing tone alone does not count toward the limit.
+- Remaining runs display as `10 - aiDescriptionGenerationCount`.
+- When the limit is reached, generate/regenerate controls are disabled and a limit message is shown.
+- `Accept` updates the current form description in client state only.
+- The user must still click `Save Draft` to persist the accepted description to the database.
+- There is no special undo after `Accept`; manual editing remains the recovery path.
+- Description enhancement uses a route handler, not a server action, because the response must stream.
+- Seller ownership and `draft` status are validated before enhancement quota is consumed.
+- Quota increments once per accepted generate/regenerate request.
+- Primary-to-fallback handoff within one request does not increment quota again.
+- Description enhancer prompt input is limited to:
+  - current listing title
+  - current listing category
+  - current listing condition
+  - current listing description
+- Description enhancer must not use seller profile data or unrelated user context.
+- Description enhancer output rules:
+  - `50-200` words
+  - tone-appropriate
+  - never invent features or specs not present in the source description
+- Stream provisional text into the preview panel while generating.
+- Only enable `Accept` after the completed response passes final validation.
+- Validation failure or total AI failure must preserve the existing textarea value and show a recoverable error.
 
 ## Shared Interfaces And Rules
 
-### Listing enums
+### Database changes
 
-- `status`: `draft | scheduled | active | ended`
-- `category`:
-  - `electronics`
-  - `fashion`
-  - `home_garden`
-  - `collectibles`
-  - `art`
-  - `jewelry_watches`
-  - `toys_hobbies`
-  - `sports_outdoors`
-  - `media`
-  - `other`
-- `condition`:
-  - `new`
-  - `like_new`
-  - `good`
-  - `fair`
-  - `poor`
+- Add `aiDescriptionGenerationCount` to the `listing` table.
+- Type: integer
+- Nullability: non-null
+- Default: `0`
+- Purpose: persist the per-listing AI Description Enhancer usage count.
 
-### Listing table
+### Environment
 
-- `id`
-- `sellerId`
-- `title`
-- `description`
-- `location`
-- `category`
-- `condition`
-- `startingBidCents`
-- `reservePriceCents` nullable
-- `startsAt` nullable
-- `endsAt` required
-- `status`
-- `createdAt`
-- `updatedAt`
+- Add `AI_GATEWAY_API_KEY` to `.env.example`.
+- Keep `.env.local` as the local-development secret source.
+- Retain existing Cloudinary variables unchanged.
 
-### Listing image table
+### Shared AI service contract
 
-- `id`
-- `listingId`
-- `publicId`
-- `url`
-- `isMain`
-- `createdAt`
+- Expand `src/server/ai.ts` into the shared Phase 2 AI boundary.
+- Keep the module server-only.
+- Responsibilities:
+  - model selection and fallback orchestration
+  - Vercel AI Gateway provider wiring
+  - structured object generation for Smart Listing Creator
+  - streamed text generation for AI Description Enhancer
+  - shared fallback semantics where one user action equals one request
+- The service module should expose clear seams for:
+  - Smart Listing Creator structured generation
+  - Description Enhancer streamed generation
+  - primary-to-fallback retry within the same request
+- AI output must always be validated before it can affect saved data or accepted UI state.
 
-### Phase 1 route and action surfaces
+### Shared schemas and normalization
 
-- `/sell`
-- `/listings`
-- `/listings/[id]`
-- `/dashboard/listings`
-- Protected upload-sign endpoint for Cloudinary browser uploads
-- Seller-owned mutations for:
-  - create draft after first image upload
-  - save draft changes
-  - publish listing
-  - return listing to draft
-  - delete draft listing
-  - attach additional image
-  - set main image
-  - delete image
+- Smart Listing Creator structured result schema:
+  - `title`
+  - `description`
+  - `category`
+  - `condition`
+  - `suggestedStartingPriceCents`
+- Category normalization rules:
+  - accept only existing listing category enums
+  - coerce invalid or low-confidence category output to `other`
+- Condition normalization rules:
+  - accept only existing listing condition enums
+  - reject invalid condition output and treat it as AI failure for that request
+- Price normalization rules:
+  - output is integer cents
+  - output must be positive
+  - reserve price is not part of the schema
+- Description Enhancer schema/rules:
+  - tone enum: `concise | max_hype | sarcastic | friendly`
+  - final validated output length: `50-200` words
+  - reject outputs that invent features/specs beyond the source description
 
-### Storage and environment
+### Shared prompt rules
 
-- Keep the storage adapter abstraction under `src/server/`.
-- Extend the storage plan from upload/delete-only to include signed browser upload support.
-- Required env vars:
-  - `CLOUDINARY_CLOUD_NAME`
-  - `CLOUDINARY_API_KEY`
-  - `CLOUDINARY_API_SECRET`
-  - listing images folder default, e.g. `CLOUDINARY_LISTING_IMAGES_FOLDER`
-- Use the `cloudinary` npm package for server-side signature generation and asset deletion.
-- Browser uploads should go directly to Cloudinary with XHR progress tracking.
+- Do not use seller profile data, account history, or unrelated session context.
+- Smart Listing Creator prompt input is the uploaded listing image only.
+- Description Enhancer prompt input is listing text plus selected tone only.
+- Prompts must explicitly instruct the model not to invent facts, accessories, specs, defects, provenance, or condition details that are not evident from the allowed input.
 
-### Seller rules
+## 2A - Smart Listing Creator On `/sell`
 
-- Only authenticated users can access `/sell` and `/dashboard/listings`.
-- Draft listings are hidden from the public `/listings` page.
-- Draft listing detail pages are visible only to the owner.
-- Editing is allowed only while a listing is in `draft`.
-- Publish from `draft` sets:
-  - `active` when `startsAt` is empty
-  - `scheduled` when `startsAt` is in the future
-- Return to draft is available in Phase 1 for `scheduled` and `active` listings because no bid table exists yet.
-- Ended listings expose no seller action buttons.
-- Image-management actions are seller-only and draft-only.
-
-### Placeholder pricing rules for Phase 1
-
-- Listings page:
-  - show `startingBidCents` as the current price
-  - show bid count as `0`
-- Listing detail page:
-  - current bid = `startingBidCents`
-  - minimum bid = `startingBidCents`
-  - bid count = `0`
-- Bid controls for non-owners on `/listings/[id]` are placeholder UI only in Phase 1.
-
-### Fake default draft payload for first upload
-
-- `title`: deterministic placeholder string derived from the current fake data contract
-- `description`: deterministic placeholder description
-- `location`: deterministic placeholder location
-- `category`: deterministic placeholder category
-- `condition`: deterministic placeholder condition
-- `startingBidCents`: deterministic placeholder amount
-- `reservePriceCents`: `null`
-- `startsAt`: `null`
-- `endsAt`: `now + 7 days`
-- `status`: `draft`
-
-The exact fake values should live in one shared helper so Phase 2 can replace only that seam with AI-generated output.
-
-## Cross-Cutting Implementation Work
-
-- Add missing UI primitives consistent with the existing `src/components/ui/` pattern:
-  - dialog
-  - alert-dialog
-  - tabs
-  - select
-  - textarea
-  - simple upload progress helper if needed
-- Update the shared status badge so it represents listing statuses:
-  - `draft`
-  - `scheduled`
-  - `active`
-  - `ended`
-- Keep routes thin and move listing logic into `src/features/listings/`.
-- Prefer server components for data reads and client components only for upload flows, tabs, thumbnail swapping, dialog interactivity, and form state.
-- Reuse existing auth/session patterns with `requireSession` and seller ownership checks.
-
-## 1A - Schema, Seed Data, `/listings`, and `/dashboard/listings`
-
-Status: Complete on 2026-03-22
+Status: Not started
 
 ### Deliverables
 
-- Listing and listing-image schema added to Drizzle with relations.
-- SQL migration checked in under `drizzle/`.
-- Listing seed data added to `src/db/seed.ts`.
-- Public `/listings` page replaced with DB-backed card grid.
-- Protected `/dashboard/listings` page added with status tabs and empty state.
-- User menu updated to include `My Listings` while keeping `My dashboard`.
-- Status badge updated to support listing statuses.
-
-### Implementation tasks
-
-- Extend `src/db/schema.ts` with `listing` and `listingImage` tables plus relations to `user`.
-- Preserve integer cents for money values and timestamp fields for dates.
-- Generate and check in the migration after the schema is finalized.
-- Add reusable listing enums and listing status helpers in `src/features/listings/`.
-- Add query helpers or server-side read functions for:
-  - public listings excluding drafts
-  - seller listings filtered by status
-  - shared listing card data projection
-- Replace the placeholder `/listings` cards with real cards that include:
-  - main image
-  - overlaid color-coded status badge
+- Shared AI server module introduced for structured generation and fallback.
+- `/sell` first-image draft creation flow upgraded from fake seeded defaults to AI-generated suggestions on success.
+- Smart Listing Creator limited to the uploaded image as model input.
+- AI-generated listing draft saves:
   - title
-  - current price
-  - bid count
-  - seller name
-  - time remaining
-  - link to `/listings/[id]`
-- Add `/dashboard/listings` as a protected route:
-  - default tab `Drafts`
-  - tabs for `Drafts | Active | Scheduled | Ended`
-  - same card layout as public `/listings`
-  - current-user filtering only
-  - empty state when the selected tab has no listings
-- Update the account menu to link to `/dashboard/listings`.
-- Seed data requirements:
-  - keep the existing seeded users
-  - add `10` listings total
-  - include multiple sellers
-  - include multiple categories and conditions
-  - include `draft`, `scheduled`, `active`, and `ended` statuses
-  - attach image URLs from `picsum.photos`
-  - ensure enough records exist to exercise every dashboard tab and public listings status
-
-### Test tasks
-
-- Unit tests for listing enums, status helpers, and time-remaining formatting helpers.
-- Integration tests for:
-  - public `/listings` excluding draft listings
-  - public cards linking to `/listings/[id]`
-  - `/dashboard/listings` auth protection
-  - `/dashboard/listings` status filtering
-  - `/dashboard/listings` empty state
-
-### Exit criteria
-
-- Migration applies cleanly in the test harness.
-- Seed command creates users plus ten listings with images.
-- Public and seller listing grids are DB-backed and status-aware.
-
-## 1B - `/sell` Create Listing Page With Signed Cloudinary Upload
-
-Status: Complete on 2026-03-22
-
-### Deliverables
-
-- `/sell` replaced with the two-panel listing creation layout.
-- Signed Cloudinary upload endpoint and server-side signature generation added.
-- Client-side upload flow added with local preview, XHR progress, and processing state.
-- Draft creation mutation added after successful first image upload.
+  - description
+  - category
+  - condition
+  - starting bid
+- Total AI failure keeps the user on `/sell` with retry and manual fallback actions.
+- `Continue without AI` creates a draft with the locked manual fallback payload.
 
 ### Implementation tasks
 
-- Build the `/sell` layout:
-  - page header `Create Your Listing`
-  - centered two-panel layout below the header
-  - left panel `2/3` width, right panel `1/3` width on desktop/tablet
-  - no visible page scrollbars on desktop/tablet
-  - stacked layout allowed on narrow screens
-- Left panel state 1: drop zone
-  - large upload icon centered
-  - drag-and-drop and click-to-select behavior
-  - hidden file input
-  - dragover highlight state
-- Left panel state 2: local preview
-  - render local image preview only
-  - `Continue` starts upload
-  - `Cancel` clears preview and returns to state 1
-- Right panel content:
-  - static three-step panel
-  - numbered circles with horizontally aligned headings
-  - brief descriptions under each heading
-- Add a protected signed-upload endpoint or equivalent route handler that:
-  - verifies session
-  - returns signed Cloudinary upload parameters for listing images
-  - scopes uploads to the listing images folder
-- Client upload flow:
-  - request signed params
-  - upload file directly to Cloudinary with XHR progress percentage
-  - switch to `Processing…` after Cloudinary upload completes
-  - call seller-only draft creation mutation
-  - persist the listing row and first listing-image row
-  - redirect to `/listings/[id]` after the draft is created
-- Keep the first draft publish-ready by applying the fake default payload plus the first uploaded image.
-- Add environment parsing or validation for the required Cloudinary variables.
-- Add or extend storage utilities to support:
-  - signature generation
-  - asset deletion
-
-### Test tasks
-
-- Unit tests for fake-default draft generation.
-- Integration tests for:
-  - `/sell` auth protection
-  - two-state upload UI behavior
-  - successful first-image draft creation
+- Add the Phase 2 dependency and environment documentation needed for Vercel AI Gateway and the Vercel AI SDK.
+- Expand `src/server/ai.ts` into a production-facing AI boundary with:
+  - primary model selection
+  - fallback model selection
+  - Vercel AI Gateway configuration
+  - structured object generation
+  - deterministic fallback orchestration
+- Add shared Smart Listing Creator prompt builder(s) and result schema(s).
+- Add shared normalization helpers for:
+  - category mapping to existing enums
+  - condition validation against existing enums
+  - starting-price cents normalization
+- Replace the current seed-based fake-default success path in the draft-creation mutation flow.
+- Keep the existing Cloudinary upload step first.
+- After Cloudinary upload succeeds:
+  - send the uploaded image as the only model input
+  - run Smart Listing Creator with the primary model
+  - retry the same logical request against the fallback model on provider/model failure
+  - validate and normalize the result
+  - create the draft row and first image row using the AI result
+  - set `reservePriceCents` to `null`
+  - keep `startsAt` as `null`
+  - set `endsAt` to `now + 7 days`
+  - set `status` to `draft`
   - redirect to `/listings/[id]`
-  - signed upload endpoint rejecting unauthenticated requests
-
-### Exit criteria
-
-- Authenticated user can upload the first image, create a draft, and land on the detail page.
-- Upload progress and processing states are visible during the flow.
-
-## 1C - `/listings/[id]` Display
-
-Status: Complete on 2026-03-22
-
-### Deliverables
-
-- Listing detail page added with the requested top section and two-column layout.
-- Draft visibility rules enforced.
-- Image gallery added with local main-image swapping.
-- Placeholder buyer panel added for non-owners.
-
-### Implementation tasks
-
-- Add `/listings/[id]` server-side read logic:
-  - public access for non-draft listings
-  - owner-only access for drafts
-  - return not found for non-owner draft requests
-- Top section layout:
-  - large title on the left
-  - status badge on the right
-  - metadata row for current bid, minimum bid, and time remaining
-- Left panel `3/5` width:
-  - single wrapping card for all content
-  - main image
-  - thumbnail strip below, max `5`
-  - clicking a thumbnail swaps the main image client-side
-  - metadata boxes for seller, location, category, condition
-  - description box below metadata
-- Right panel `2/5` width:
-  - seller controls placeholder area when owner
-  - bid controls placeholder when not owner
-- Use Phase 1 placeholder pricing:
-  - current bid = starting bid
-  - minimum bid = starting bid
-  - bid count = `0`
-  - time remaining and labels are status-aware
-- Include seller-only overlay action affordances on thumbnails if helpful for layout completeness, but actual mutations land in later sub-phases.
+- Total AI failure path on `/sell`:
+  - keep the user on the page
+  - preserve the uploaded image state if practical
+  - show a recoverable error message
+  - show `Retry AI`
+  - show `Continue without AI`
+- `Retry AI` behavior:
+  - rerun the same Smart Listing Creator request using the already uploaded image reference
+  - do not upload the image to Cloudinary again unless the client lost the upload result
+- `Continue without AI` behavior:
+  - create the draft immediately with the locked manual fallback payload
+  - attach the already uploaded image as the main image
+  - redirect to `/listings/[id]`
+- Update copy in the `/sell` UI to reflect AI-assisted draft creation instead of deterministic placeholder generation.
+- Ensure category and condition values saved by Smart Listing Creator match the existing Drizzle enum-backed listing fields.
+- Preserve current auth rules for `/sell`.
 
 ### Test tasks
 
-- Unit tests for owner access helpers and placeholder pricing helpers.
+- Unit tests for:
+  - Smart Listing Creator prompt shaping from uploaded image input only
+  - category normalization to existing enum values
+  - invalid or low-confidence category mapping to `other`
+  - condition validation
+  - starting-price normalization into positive integer cents
+  - one-request primary-to-fallback orchestration
+  - manual non-AI fallback payload generation
 - Integration tests for:
-  - public access to non-draft listings
-  - owner-only access to drafts
-  - non-owner draft requests returning not found
-  - main image and thumbnail rendering
+  - `/sell` auth protection remains intact
+  - successful AI-assisted first-image draft creation
+  - redirect to `/listings/[id]` after AI success
+  - total AI failure showing retry and manual fallback controls
+  - `Continue without AI` creating a draft with the locked fallback payload
+  - total AI failure preserving manual listing creation access instead of blocking the seller
 
 ### Exit criteria
 
-- Listing detail page renders for seeded/public records and respects draft privacy rules.
-- Gallery supports local thumbnail switching without server mutation.
+- An authenticated seller can upload one image on `/sell`, receive AI-generated draft details, and land on the draft detail page.
+- The saved category always matches the existing category enum set.
+- Total AI failure does not block listing creation because `Continue without AI` remains available.
+- The old seed-based fake-default success path is no longer the default draft-creation flow.
 
-## 1D - Listing Detail Seller Actions And Edit Modal
+## 2B - AI Description Enhancer On `/listings/[id]/edit`
 
-Status: Complete on 2026-03-24
+Status: Not started
 
 ### Deliverables
 
-- Seller controls added to the right panel.
-- Draft refine modal added with the requested field layout.
-- Seller mutations added for save draft, publish, return to draft, and delete draft.
+- Draft-owner-only AI Description Enhancer added to the existing edit page.
+- Tone dropdown added with `Concise`, `Max-hype`, `Sarcastic`, and `Friendly`.
+- Generated description text streams into a preview panel below the controls.
+- Post-generation actions added:
+  - `Regenerate`
+  - `Accept`
+  - `Cancel`
+- Loading spinner shown while AI is generating.
+- Regeneration/generation usage count persisted per listing with max `10`.
 
 ### Implementation tasks
 
-- Add seller action visibility rules:
-  - `draft`: `Refine Listing`, `Publish`, `Delete`
-  - `scheduled`: `Return to Draft`
-  - `active`: `Return to Draft`
-  - `ended`: no seller action buttons
-- Refine modal requirements:
-  - shadcn-style dialog
-  - fields:
-    - title
-    - description
-    - location
-    - category
-    - condition
-    - starting bid
-    - reserve price optional
-    - start at optional
-    - ends at
-  - layout:
-    - title full width
-    - description full width
-    - location full width
-    - category and condition on one row
-    - starting bid and reserve price on one row
-    - start at and ends at on one row
-  - submit button: `Save Draft` only
-- Form behavior:
-  - React Hook Form + Zod
-  - persist updates
-  - close modal on successful save
-  - do not change listing status on save
-- Publish mutation:
-  - allowed only from `draft`
-  - set `active` when `startsAt` absent
-  - set `scheduled` when `startsAt` is in the future
-- Return-to-draft mutation:
-  - allowed for `scheduled` and `active` in Phase 1
-  - return the listing to `draft`
-- Delete mutation:
-  - draft-only
-  - confirmation via alert dialog
-  - warning that action is permanent
-  - delete Cloudinary assets first
-  - hard-delete image rows and listing row after asset deletion
-- Keep abandoned edits safe:
-  - browser close or modal close does not auto-publish
-  - listing stays in draft until the user explicitly publishes
+- Add the `aiDescriptionGenerationCount` column to the listing schema and generate/check in the Drizzle migration.
+- Extend listing queries for the edit page so the editor receives the persisted generation count.
+- Extend listing mutation/query types so the client can render remaining generations.
+- Add a description-enhancer tone enum and any shared labels/helpers needed for UI rendering.
+- Add prompt builder(s) for description enhancement using only:
+  - title
+  - category
+  - condition
+  - existing description
+  - selected tone
+- Add final validation helpers for:
+  - `50-200` word length
+  - tone selection
+  - “no invented specs/features” instruction compliance
+- Add a route handler for streamed description generation.
+- Route-handler responsibilities:
+  - require authenticated session
+  - load the requested listing
+  - verify seller ownership
+  - verify `draft` status
+  - verify remaining quota before generation starts
+  - increment quota once for the accepted request
+  - stream model output into the response
+  - retry against the fallback model within the same request if the primary fails before a valid stream is established
+- Update the draft editor UI near the description field:
+  - add the tone dropdown
+  - add `Refine description with AI`
+  - show remaining runs
+  - show spinner/loading state while generating
+  - show a preview panel below the controls
+- Preview panel behavior:
+  - stream provisional text as it arrives
+  - keep the original textarea value untouched during generation
+  - after a successful validated completion, show `Regenerate`, `Accept`, and `Cancel`
+  - on validation failure, show an error and keep the textarea unchanged
+- `Accept` behavior:
+  - overwrite the React Hook Form description field with the generated text
+  - do not persist to DB yet
+- `Cancel` behavior:
+  - discard the current generated preview
+  - keep the form description as-is
+- `Regenerate` behavior:
+  - use the currently selected tone
+  - consume one additional generation if quota remains
+- Limit-reached behavior:
+  - disable generate/regenerate controls
+  - show a clear remaining-count/limit-reached message
+- Ensure the existing `Save Draft` flow still controls database persistence after `Accept`.
+- Preserve existing edit-page auth and draft-only access rules.
 
 ### Test tasks
 
-- Unit tests for draft validation, publish validation, and status-transition helpers.
+- Unit tests for:
+  - tone prompt shaping
+  - `50-200` word validation
+  - quota accounting helpers
+  - one-request/one-quota behavior with internal fallback
+  - remaining-generation display helpers if extracted
 - Integration tests for:
-  - draft save success
-  - publish immediate vs scheduled
-  - return-to-draft button visibility
-  - return-to-draft mutation
-  - draft deletion removing DB rows and calling storage deletion
+  - draft-owner-only access to the AI Description Enhancer
+  - tone selection driving the request payload
+  - streaming preview rendering
+  - loading spinner while generation is in progress
+  - `Accept` overwriting form state only
+  - `Cancel` preserving the current textarea content
+  - `Regenerate` consuming quota
+  - limit-reached UI disabling generate/regenerate
+  - accepted description persisting only after the user clicks `Save Draft`
+  - validation or AI failure preserving the existing textarea value
 
 ### Exit criteria
 
-- Seller can fully refine and publish a draft from the detail page.
-- Status-aware action buttons match the locked Phase 1 rules.
-
-## 1E - Additional Seller Image Upload And Management
-
-Status: Complete on 2026-03-24
-
-### Deliverables
-
-- Seller-only additional image drop zone added below the right panel on draft listings.
-- Additional-image upload flow added with progress.
-- Choose-main and delete-image mutations added.
-
-### Implementation tasks
-
-- Add seller-only drop zone below the right panel:
-  - draft listings only
-  - no local preview
-  - hidden file input plus drag-and-drop support
-  - same signed Cloudinary upload pattern as `/sell`
-  - XHR progress shown during upload
-- After successful upload:
-  - persist the image row immediately
-  - append the image to the thumbnail strip
-  - enforce the `5 total` cap before upload begins
-- Add seller-only image actions:
-  - choose another image as main
-  - delete image
-- Image-management rules:
-  - available only to the owner and only in `draft`
-  - deleting the last remaining image is disallowed
-  - deleting the current main image auto-promotes another existing image to main
-  - all image-management controls are hidden or disabled outside `draft`
-
-### Test tasks
-
-- Unit tests for image-limit and main-image selection helpers.
-- Integration tests for:
-  - additional image upload
-  - max-5 enforcement
-  - choose-main behavior
-  - delete-image behavior
-  - cannot delete the last remaining image
-
-### Exit criteria
-
-- Seller can upload additional images, change the main image, and delete non-final images on a draft listing.
-- Thumbnail strip stays consistent with persisted image state.
+- A draft owner can generate, preview, regenerate, and accept streamed AI description text on `/listings/[id]/edit`.
+- The accepted description does not persist until `Save Draft` succeeds.
+- Generation usage is persisted per listing and capped at `10`.
+- Limit-reached behavior is visible and enforced in both UI and server-side request validation.
 
 ## Final Verification Checklist
 
@@ -472,5 +349,5 @@ Status: Complete on 2026-03-24
 
 ## Completion Notes
 
-- Update `tasks/SPEC.md` tracker checkboxes as each Phase 1 milestone lands.
-- If implementation scope changes, update this file before coding so later sessions inherit the new source of truth.
+- Update `tasks/SPEC.md` tracker checkboxes as shared AI infrastructure, `2A`, `2B`, migration work, and test milestones land.
+- If Phase 2 scope changes, update this file before coding so later sessions inherit the new source of truth.

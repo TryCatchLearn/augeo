@@ -102,6 +102,18 @@ export const listingDraftFormSchema = z
 export type ListingDraftFormValues = z.infer<typeof listingDraftFormSchema>;
 export type ListingDraftFormInput = z.input<typeof listingDraftFormSchema>;
 
+export const smartListingCreatorSchema = z.object({
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  category: z.string().trim().min(1),
+  condition: z.string().trim().min(1),
+  suggestedStartingPriceCents: z.number().int().positive(),
+});
+
+export type SmartListingCreatorResult = z.infer<
+  typeof smartListingCreatorSchema
+>;
+
 const isoDateTimeField = z
   .string()
   .refine((value) => !Number.isNaN(Date.parse(value)), "Invalid datetime.");
@@ -139,6 +151,96 @@ export const addListingImageSchema = z.object({
   uploadPublicId: z.string().min(1),
   uploadUrl: z.url(),
 });
+
+const listingCategoryAliases: Record<string, ListingCategory> = {
+  art: "art",
+  collectible: "collectibles",
+  collectibles: "collectibles",
+  electronics: "electronics",
+  electronic: "electronics",
+  fashion: "fashion",
+  clothing: "fashion",
+  home: "home_garden",
+  home_garden: "home_garden",
+  home_and_garden: "home_garden",
+  "home & garden": "home_garden",
+  "home and garden": "home_garden",
+  jewelry: "jewelry_watches",
+  jewelry_watches: "jewelry_watches",
+  watches: "jewelry_watches",
+  media: "media",
+  movies: "media",
+  music: "media",
+  other: "other",
+  sports: "sports_outdoors",
+  outdoors: "sports_outdoors",
+  sports_outdoors: "sports_outdoors",
+  toys: "toys_hobbies",
+  hobbies: "toys_hobbies",
+  toys_hobbies: "toys_hobbies",
+  vehicle: "vehicles",
+  vehicles: "vehicles",
+  automotive: "vehicles",
+  auto: "vehicles",
+};
+
+const listingConditionAliases: Record<string, ListingCondition> = {
+  new: "new",
+  brand_new: "new",
+  "brand new": "new",
+  like_new: "like_new",
+  "like new": "like_new",
+  excellent: "like_new",
+  good: "good",
+  fair: "fair",
+  poor: "poor",
+  used_good: "good",
+  used_fair: "fair",
+};
+
+function normalizeEnumInput(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll("&", "and")
+    .replaceAll("/", " ")
+    .replaceAll("-", "_")
+    .replace(/\s+/g, "_");
+}
+
+export function normalizeSmartListingCategory(value: string): ListingCategory {
+  const normalizedValue = normalizeEnumInput(value);
+
+  return (
+    listingCategoryAliases[normalizedValue] ??
+    (listingCategories.includes(normalizedValue as ListingCategory)
+      ? (normalizedValue as ListingCategory)
+      : "other")
+  );
+}
+
+export function validateSmartListingCondition(
+  value: string,
+): ListingCondition | null {
+  const normalizedValue = normalizeEnumInput(value);
+
+  return (
+    listingConditionAliases[normalizedValue] ??
+    (listingConditions.includes(normalizedValue as ListingCondition)
+      ? (normalizedValue as ListingCondition)
+      : null)
+  );
+}
+
+export function normalizeSuggestedStartingPriceCents(value: number) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  const cents = Math.round(value);
+
+  return cents > 0 ? cents : null;
+}
 
 export function validateListingImageCount(imageCount: number) {
   if (imageCount >= maxListingImageCount) {

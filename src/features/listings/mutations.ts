@@ -17,49 +17,15 @@ import {
   getPublishedStatus,
 } from "@/features/listings/domain";
 import type { SaveDraftListingInput } from "@/features/listings/schema";
+import {
+  normalizeSmartListingCategory,
+  normalizeSuggestedStartingPriceCents,
+  validateSmartListingCondition,
+} from "@/features/listings/schema";
+import { AiGenerationError, generateSmartListingFromImage } from "@/server/ai";
 import { deleteCloudinaryAssets } from "@/server/cloudinary";
 
 type Database = LibSQLDatabase<typeof schema>;
-
-const placeholderTitles = [
-  "Vintage Find Awaiting Its Spotlight",
-  "Collector Piece Ready For Auction",
-  "Fresh Listing Prepared For Launch",
-  "Curated Lot With Room To Shine",
-  "Standout Item Tuned For Bidding",
-] as const;
-
-const placeholderDescriptions = [
-  "A clean starter draft generated from the first uploaded photo. Review the details, fine-tune the description, and publish when everything looks right.",
-  "This placeholder description keeps the draft publish-ready while you refine the exact story, specs, and condition notes for buyers.",
-  "Your image has already been saved, and this generated draft gives you a complete starting point for the auction flow.",
-  "A deterministic draft description is in place so the listing can be opened immediately and refined without rebuilding any state.",
-  "This draft uses safe placeholder copy based on the upload seed, making it easy to continue editing from a stable default.",
-] as const;
-
-const placeholderLocations = [
-  "Seattle, WA",
-  "Austin, TX",
-  "Brooklyn, NY",
-  "Denver, CO",
-  "Portland, OR",
-] as const;
-
-const placeholderCategories: readonly ListingCategory[] = [
-  "electronics",
-  "fashion",
-  "collectibles",
-  "home_garden",
-  "media",
-] as const;
-
-const placeholderConditions: readonly ListingCondition[] = [
-  "like_new",
-  "good",
-  "fair",
-  "new",
-  "poor",
-] as const;
 
 export type ListingDraftDefaults = {
   title: string;
@@ -78,8 +44,19 @@ export type CreateDraftFromUploadInput = {
   sellerId: string;
   uploadPublicId: string;
   uploadUrl: string;
-  seed: string;
+  creationMode: "ai" | "manual";
 };
+
+export type CreateDraftFromFirstUploadResult =
+  | { id: string; status: "created" }
+  | { status: "ai_failed"; message: string };
+
+const manualDraftLocation = "Add location";
+const manualDraftTitle = "Untitled draft";
+const manualDraftDescription =
+  "Add a seller-written description before publishing.";
+const smartListingFailureMessage =
+  "We couldn't create an AI draft right now. Retry AI or continue without AI.";
 
 async function resolveDatabase(database?: Database) {
   if (database) {
@@ -91,29 +68,16 @@ async function resolveDatabase(database?: Database) {
   return db;
 }
 
-function hashSeed(seed: string) {
-  let hash = 0;
-
-  for (const character of seed) {
-    hash = (hash * 31 + character.charCodeAt(0)) % 2147483647;
-  }
-
-  return Math.abs(hash);
-}
-
-export function buildFakeDraftDefaults(
-  seed: string,
+export function buildManualDraftDefaults(
   now = new Date(),
 ): ListingDraftDefaults {
-  const hash = hashSeed(seed);
-
   return {
-    title: placeholderTitles[hash % placeholderTitles.length],
-    description: placeholderDescriptions[hash % placeholderDescriptions.length],
-    location: placeholderLocations[hash % placeholderLocations.length],
-    category: placeholderCategories[hash % placeholderCategories.length],
-    condition: placeholderConditions[hash % placeholderConditions.length],
-    startingBidCents: 2500 + (hash % 36) * 500,
+    title: manualDraftTitle,
+    description: manualDraftDescription,
+    location: manualDraftLocation,
+    category: "other",
+    condition: "good",
+    startingBidCents: 100,
     reservePriceCents: null,
     startsAt: null,
     endsAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
@@ -121,20 +85,57 @@ export function buildFakeDraftDefaults(
   };
 }
 
-export async function createDraftFromFirstUpload(
-  input: CreateDraftFromUploadInput,
-  database?: Database,
+export function buildSmartListingDraftDefaults(
+  input: {
+    title: string;
+    description: string;
+    category: string;
+    condition: string;
+    suggestedStartingPriceCents: number;
+  },
+  now = new Date(),
+): ListingDraftDefaults {
+  const condition = validateSmartListingCondition(input.condition);
+  const startingBidCents = normalizeSuggestedStartingPriceCents(
+    input.suggestedStartingPriceCents,
+  );
+
+  if (!condition || !startingBidCents) {
+    throw new AiGenerationError("Invalid smart listing result.");
+  }
+
+  return {
+    title: input.title.trim(),
+    description: input.description.trim(),
+    location: manualDraftLocation,
+    category: normalizeSmartListingCategory(input.category),
+    condition,
+    startingBidCents,
+    reservePriceCents: null,
+    startsAt: null,
+    endsAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+    status: "draft",
+  };
+}
+
+async function insertDraftWithMainImage(
+  input: {
+    sellerId: string;
+    uploadPublicId: string;
+    uploadUrl: string;
+    defaults: ListingDraftDefaults;
+  },
+  database: Database,
+  now: Date,
 ) {
-  const resolvedDatabase = await resolveDatabase(database);
-  const now = new Date();
-  const defaults = buildFakeDraftDefaults(input.seed, now);
   const listingId = randomUUID();
 
-  await resolvedDatabase.transaction(async (tx) => {
+  await database.transaction(async (tx) => {
     await tx.insert(listing).values({
       id: listingId,
       sellerId: input.sellerId,
-      ...defaults,
+      aiDescriptionGenerationCount: 0,
+      ...input.defaults,
     });
 
     await tx.insert(listingImage).values({
@@ -147,7 +148,51 @@ export async function createDraftFromFirstUpload(
     });
   });
 
-  return { id: listingId };
+  return { id: listingId, status: "created" as const };
+}
+
+export async function createDraftFromFirstUpload(
+  input: CreateDraftFromUploadInput,
+  database?: Database,
+  dependencies?: {
+    generateSmartListingFromImage?: typeof generateSmartListingFromImage;
+  },
+) {
+  const resolvedDatabase = await resolveDatabase(database);
+  const now = new Date();
+  const insertDraft = (defaults: ListingDraftDefaults) =>
+    insertDraftWithMainImage(
+      {
+        sellerId: input.sellerId,
+        uploadPublicId: input.uploadPublicId,
+        uploadUrl: input.uploadUrl,
+        defaults,
+      },
+      resolvedDatabase,
+      now,
+    );
+
+  if (input.creationMode === "manual") {
+    return insertDraft(buildManualDraftDefaults(now));
+  }
+
+  try {
+    const smartListing = await (
+      dependencies?.generateSmartListingFromImage ??
+      generateSmartListingFromImage
+    )(input.uploadUrl);
+
+    return insertDraft(buildSmartListingDraftDefaults(smartListing, now));
+  } catch (error) {
+    if (error instanceof AiGenerationError) {
+      return {
+        status: "ai_failed" as const,
+        message: smartListingFailureMessage,
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function getOwnedListing(

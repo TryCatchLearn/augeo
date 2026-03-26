@@ -22,6 +22,7 @@ export const listingCategories = [
   "jewelry_watches",
   "toys_hobbies",
   "sports_outdoors",
+  "vehicles",
   "media",
   "other",
 ] as const;

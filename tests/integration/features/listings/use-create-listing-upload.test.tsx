@@ -51,6 +51,9 @@ function HookHarness() {
       <button type="button" onClick={() => state.handleContinue()}>
         Continue
       </button>
+      <button type="button" onClick={() => state.handleContinueWithoutAi()}>
+        Continue without AI
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -120,8 +123,69 @@ describe("useCreateListingUpload", () => {
       "Unable to prepare the image upload.",
     );
     expect(
-      screen.getByText("First image ready to become your draft cover photo."),
+      screen.getByText("First image ready for AI-assisted draft creation."),
     ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("reuses the uploaded image for the manual fallback path after AI failure", async () => {
+    hoisted.requestListingImageUploadSignature.mockResolvedValue({
+      cloudName: "demo-cloud",
+      apiKey: "demo-key",
+      folder: "augeo/listings",
+      timestamp: 1763611200,
+      signature: "signed-payload",
+    });
+    hoisted.uploadListingImageToCloudinary.mockResolvedValue({
+      public_id: "cloudinary-public-id",
+      secure_url: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+    });
+    hoisted.createDraftFromFirstUploadAction
+      .mockResolvedValueOnce({
+        status: "ai_failed",
+        errorMessage: "Retry AI or continue without AI.",
+      })
+      .mockResolvedValueOnce({
+        status: "created",
+        listingId: "listing-123",
+      });
+
+    render(<HookHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Retry AI or continue without AI.",
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Continue without AI" }),
+      );
+    });
+
+    expect(hoisted.requestListingImageUploadSignature).toHaveBeenCalledTimes(1);
+    expect(hoisted.uploadListingImageToCloudinary).toHaveBeenCalledTimes(1);
+    expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenNthCalledWith(
+      1,
+      {
+        uploadPublicId: "cloudinary-public-id",
+        uploadUrl: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+        creationMode: "ai",
+      },
+    );
+    expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenNthCalledWith(
+      2,
+      {
+        uploadPublicId: "cloudinary-public-id",
+        uploadUrl: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+        creationMode: "manual",
+      },
+    );
+    expect(push).toHaveBeenCalledWith("/listings/listing-123");
   });
 });

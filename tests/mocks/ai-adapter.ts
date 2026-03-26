@@ -1,15 +1,16 @@
+import type { infer as ZodInfer, ZodType } from "zod";
 import type { AiAdapter, GenerateStructuredObjectOptions } from "@/server/ai";
 
 export class MockAiAdapter implements AiAdapter {
-  calls: GenerateStructuredObjectOptions[] = [];
+  calls: GenerateStructuredObjectOptions<ZodType>[] = [];
 
   constructor(private readonly result: unknown) {}
 
-  async generateStructuredObject<T>(
-    options: GenerateStructuredObjectOptions,
-  ): Promise<T> {
-    this.calls.push(options);
+  async generateStructuredObject<TSchema extends ZodType>(
+    options: GenerateStructuredObjectOptions<TSchema>,
+  ): Promise<ZodInfer<TSchema>> {
+    this.calls.push(options as GenerateStructuredObjectOptions<ZodType>);
 
-    return this.result as T;
+    return this.result as ZodInfer<TSchema>;
   }
 }

@@ -9,6 +9,11 @@ import {
 } from "@/features/listings/upload";
 
 type UploadState = "idle" | "preview" | "uploading" | "processing";
+type UploadedImage = {
+  publicId: string;
+  url: string;
+};
+type CreationMode = "ai" | "manual";
 
 export function useCreateListingUpload() {
   const router = useRouter();
@@ -19,6 +24,12 @@ export function useCreateListingUpload() {
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isFailureDialogOpen, setIsFailureDialogOpen] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(
+    null,
+  );
+  const [activeCreationMode, setActiveCreationMode] =
+    useState<CreationMode>("ai");
 
   useEffect(() => {
     if (!file) {
@@ -36,40 +47,63 @@ export function useCreateListingUpload() {
 
   function handleFileSelection(nextFile: File | null) {
     setErrorMessage(null);
+    setIsFailureDialogOpen(false);
     setProgress(0);
+    setUploadedImage(null);
     setUploadState(nextFile ? "preview" : "idle");
     setFile(nextFile);
   }
 
-  async function handleContinue() {
+  async function createDraft(creationMode: CreationMode) {
     if (!file) {
       return;
     }
 
     try {
       setErrorMessage(null);
-      setProgress(1);
-      setUploadState("uploading");
+      setIsFailureDialogOpen(false);
+      setActiveCreationMode(creationMode);
+      let nextUploadedImage = uploadedImage;
 
-      const signedParams = await requestListingImageUploadSignature();
-      const uploadResult = await uploadListingImageToCloudinary(
-        file,
-        signedParams,
-        (percent) => {
-          setProgress((currentProgress) => Math.max(currentProgress, percent));
-        },
-      );
+      if (!nextUploadedImage) {
+        setProgress(1);
+        setUploadState("uploading");
+
+        const signedParams = await requestListingImageUploadSignature();
+        const uploadResult = await uploadListingImageToCloudinary(
+          file,
+          signedParams,
+          (percent) => {
+            setProgress((currentProgress) =>
+              Math.max(currentProgress, percent),
+            );
+          },
+        );
+
+        nextUploadedImage = {
+          publicId: uploadResult.public_id,
+          url: uploadResult.secure_url,
+        };
+        setUploadedImage(nextUploadedImage);
+      }
 
       setProgress(100);
       setUploadState("processing");
 
-      const { listingId } = await createDraftFromFirstUploadAction({
-        uploadPublicId: uploadResult.public_id,
-        uploadUrl: uploadResult.secure_url,
-        seed: `${file.name}:${file.size}:${uploadResult.public_id}`,
+      const result = await createDraftFromFirstUploadAction({
+        uploadPublicId: nextUploadedImage.publicId,
+        uploadUrl: nextUploadedImage.url,
+        creationMode,
       });
 
-      router.push(`/listings/${listingId}`);
+      if (result.status === "ai_failed") {
+        setUploadState("preview");
+        setErrorMessage(result.errorMessage);
+        setIsFailureDialogOpen(true);
+        return;
+      }
+
+      router.push(`/listings/${result.listingId}`);
       router.refresh();
     } catch (error) {
       setUploadState("preview");
@@ -82,15 +116,37 @@ export function useCreateListingUpload() {
     }
   }
 
+  function handleFailureDialogOpenChange(nextOpen: boolean) {
+    if (!nextOpen && errorMessage) {
+      return;
+    }
+
+    setIsFailureDialogOpen(nextOpen);
+  }
+
+  async function handleContinue() {
+    await createDraft("ai");
+  }
+
+  async function handleContinueWithoutAi() {
+    await createDraft("manual");
+  }
+
   const isBusy = uploadState === "uploading" || uploadState === "processing";
   const statusLabel =
     uploadState === "uploading"
       ? `Uploading ${progress}%`
       : uploadState === "processing"
-        ? "Processing..."
-        : file
-          ? "First image ready to become your draft cover photo."
-          : "Choose one strong image to start the listing.";
+        ? activeCreationMode === "manual"
+          ? "Creating your draft without AI..."
+          : "Asking AI to build your draft..."
+        : errorMessage && uploadedImage
+          ? "Image uploaded. Retry AI or continue without AI."
+          : file
+            ? uploadedImage
+              ? "Image uploaded and ready for another AI pass."
+              : "First image ready for AI-assisted draft creation."
+            : "Choose one strong image to start the listing.";
 
   return {
     errorMessage,
@@ -101,9 +157,13 @@ export function useCreateListingUpload() {
     previewUrl,
     progress,
     statusLabel,
+    uploadedImage,
     uploadState,
+    isFailureDialogOpen,
     setIsDragging,
     handleContinue,
+    handleContinueWithoutAi,
+    handleFailureDialogOpenChange,
     handleFileSelection,
   };
 }

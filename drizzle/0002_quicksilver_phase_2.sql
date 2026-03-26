@@ -1,0 +1,2 @@
+ALTER TABLE `listing`
+ADD `ai_description_generation_count` integer DEFAULT 0 NOT NULL;

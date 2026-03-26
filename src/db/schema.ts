@@ -106,6 +106,9 @@ export const listing = sqliteTable(
     condition: text("condition", { enum: listingConditions }).notNull(),
     startingBidCents: integer("starting_bid_cents").notNull(),
     reservePriceCents: integer("reserve_price_cents"),
+    aiDescriptionGenerationCount: integer("ai_description_generation_count")
+      .default(0)
+      .notNull(),
     startsAt: integer("starts_at", { mode: "timestamp_ms" }),
     endsAt: integer("ends_at", { mode: "timestamp_ms" }).notNull(),
     status: text("status", { enum: listingStatuses }).notNull(),

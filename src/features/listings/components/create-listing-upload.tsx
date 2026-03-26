@@ -3,6 +3,15 @@
 import { UploadCloud, X } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useCreateListingUpload } from "@/features/listings/hooks/use-create-listing-upload";
 import { cn } from "@/lib/utils";
 
@@ -17,8 +26,11 @@ export function CreateListingUpload() {
     progress,
     statusLabel,
     uploadState,
+    isFailureDialogOpen,
     setIsDragging,
     handleContinue,
+    handleContinueWithoutAi,
+    handleFailureDialogOpenChange,
     handleFileSelection,
   } = useCreateListingUpload();
 
@@ -48,7 +60,7 @@ export function CreateListingUpload() {
                 />
               </div>
             </div>
-            {errorMessage ? (
+            {errorMessage && !isFailureDialogOpen ? (
               <p className="mt-4 text-sm text-destructive" role="alert">
                 {errorMessage}
               </p>
@@ -92,8 +104,9 @@ export function CreateListingUpload() {
             </h2>
             <p className="mt-3 max-w-md text-sm leading-7 text-muted-foreground">
               Drag and drop an image or click anywhere in this panel to select
-              one. We&apos;ll use it to create a publish-ready draft with
-              placeholder details you can refine next.
+              one. We&apos;ll upload it once, ask AI to draft the core details,
+              and send you to the private listing view to refine everything
+              next.
             </p>
           </label>
         )}
@@ -110,8 +123,8 @@ export function CreateListingUpload() {
               "Choose the photo that opens your draft.",
             ],
             [
-              "We prepare the draft",
-              "We upload it and create a safe starter listing.",
+              "AI builds the draft",
+              "We upload the image, draft the listing details, and keep a manual fallback ready.",
             ],
             [
               "Refine and publish",
@@ -188,12 +201,57 @@ export function CreateListingUpload() {
                   ? "Uploading..."
                   : uploadState === "processing"
                     ? "Processing..."
-                    : "Continue"}
+                    : errorMessage
+                      ? "Retry AI"
+                      : "Create with AI"}
               </Button>
             </div>
           </div>
         </div>
       </aside>
+      <Dialog
+        open={isFailureDialogOpen}
+        onOpenChange={handleFailureDialogOpenChange}
+      >
+        <DialogContent
+          className="w-[min(32rem,calc(100vw-2rem))]"
+          showClose={false}
+        >
+          <DialogHeader>
+            <DialogTitle>AI draft couldn&apos;t be completed</DialogTitle>
+            <DialogDescription>
+              {errorMessage ??
+                "We couldn't create an AI draft right now. You can retry with the uploaded image or continue without AI."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="pt-1">
+            <div className="rounded-[1.25rem] border border-border/70 bg-background/40 p-4">
+              <p className="text-sm text-muted-foreground">
+                {file
+                  ? `Your uploaded image is still ready for ${file.name}.`
+                  : "Your uploaded image is still ready."}
+              </p>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={handleContinueWithoutAi}
+              disabled={!file || isBusy}
+            >
+              Continue without AI
+            </Button>
+            <Button
+              type="button"
+              onClick={handleContinue}
+              disabled={!file || isBusy}
+            >
+              Retry AI
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

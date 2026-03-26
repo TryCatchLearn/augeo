@@ -15,6 +15,13 @@
       "when": 1774098815619,
       "tag": "0001_flimsy_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774800000000,
+      "tag": "0002_quicksilver_phase_2",
+      "breakpoints": true
     }
   ]
 }

@@ -107,7 +107,7 @@ describe("CreateListingUpload", () => {
       await screen.findByAltText("Selected listing preview"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Continue" }),
+      screen.getByRole("button", { name: "Create with AI" }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -127,6 +127,7 @@ describe("CreateListingUpload", () => {
       }),
     } as Response);
     hoisted.createDraftFromFirstUploadAction.mockResolvedValue({
+      status: "created",
       listingId: "listing-123",
     });
 
@@ -143,7 +144,9 @@ describe("CreateListingUpload", () => {
       },
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create with AI" }),
+    );
 
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith("/listings/listing-123");
@@ -157,8 +160,87 @@ describe("CreateListingUpload", () => {
     expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenCalledWith({
       uploadPublicId: "cloudinary-public-id",
       uploadUrl: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
-      seed: "camera.jpg:6:cloudinary-public-id",
+      creationMode: "ai",
     });
+  });
+
+  it("offers retry and manual fallback after AI draft creation fails", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        cloudName: "demo-cloud",
+        apiKey: "demo-key",
+        folder: "augeo/listings",
+        timestamp: 1763611200,
+        signature: "signed-payload",
+      }),
+    } as Response);
+    hoisted.createDraftFromFirstUploadAction
+      .mockResolvedValueOnce({
+        status: "ai_failed",
+        errorMessage: "We couldn't create an AI draft right now.",
+      })
+      .mockResolvedValueOnce({
+        status: "created",
+        listingId: "listing-456",
+      });
+
+    render(<CreateListingUpload />);
+
+    const input = screen.getByLabelText("Drop your first photo here", {
+      selector: "input",
+    });
+
+    fireEvent.change(input, {
+      target: {
+        files: [new File(["create"], "camera.jpg", { type: "image/jpeg" })],
+      },
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create with AI" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "AI draft couldn't be completed",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("We couldn't create an AI draft right now."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Retry AI" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue without AI" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue without AI" }),
+    );
+
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith("/listings/listing-456");
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenNthCalledWith(
+      1,
+      {
+        uploadPublicId: "cloudinary-public-id",
+        uploadUrl: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+        creationMode: "ai",
+      },
+    );
+    expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenNthCalledWith(
+      2,
+      {
+        uploadPublicId: "cloudinary-public-id",
+        uploadUrl: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+        creationMode: "manual",
+      },
+    );
   });
 
   it("supports drag-and-drop selection and shows upload errors", async () => {
@@ -185,10 +267,10 @@ describe("CreateListingUpload", () => {
       await screen.findByAltText("Selected listing preview"),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create with AI" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Unable to prepare the image upload.",
-    );
+    expect(
+      await screen.findByText("Unable to prepare the image upload."),
+    ).toBeInTheDocument();
   });
 });

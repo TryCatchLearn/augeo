@@ -23,13 +23,13 @@ import {
 const createDraftSchema = z.object({
   uploadPublicId: z.string().min(1),
   uploadUrl: z.url(),
-  seed: z.string().min(1),
+  creationMode: z.enum(["ai", "manual"]),
 });
 
 export async function createDraftFromFirstUploadAction(input: {
   uploadPublicId: string;
   uploadUrl: string;
-  seed: string;
+  creationMode: "ai" | "manual";
 }) {
   const session = await getSession();
 
@@ -48,7 +48,17 @@ export async function createDraftFromFirstUploadAction(input: {
     ...parsedInput.data,
   });
 
-  return { listingId: draft.id };
+  if (draft.status === "ai_failed") {
+    return {
+      status: "ai_failed" as const,
+      errorMessage: draft.message,
+    };
+  }
+
+  return {
+    status: "created" as const,
+    listingId: draft.id,
+  };
 }
 
 function revalidateListingPaths(listingId: string) {
