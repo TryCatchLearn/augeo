@@ -1,7 +1,9 @@
 "use server";
 
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { listing } from "@/db/schema";
 import { getSession } from "@/features/auth/session";
 import {
   addListingImage,
@@ -15,10 +17,15 @@ import {
 } from "@/features/listings/mutations";
 import {
   addListingImageSchema,
+  descriptionEnhancerRequestSchema,
+  getRemainingDescriptionEnhancementRuns,
+  hasDescriptionEnhancementRunsRemaining,
   listingIdActionSchema,
   listingImageActionSchema,
   saveDraftListingSchema,
+  validateEnhancedDescription,
 } from "@/features/listings/schema";
+import { streamEnhancedDescription } from "@/server/ai";
 
 const createDraftSchema = z.object({
   uploadPublicId: z.string().min(1),
@@ -231,4 +238,82 @@ export async function deleteListingImageAction(input: unknown) {
   revalidateListingPaths(result.listingId);
 
   return { listingId: result.listingId, imageId: result.id };
+}
+
+export async function enhanceListingDescriptionAction(input: unknown) {
+  const session = await getSession();
+
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  const parsedInput = descriptionEnhancerRequestSchema.safeParse(input);
+
+  if (!parsedInput.success) {
+    throw new Error("Invalid description-enhancement payload");
+  }
+
+  const { db } = await import("@/db/client");
+  const enhancementRequest = await db.transaction(async (tx) => {
+    const [existingListing] = await tx
+      .select({
+        id: listing.id,
+        sellerId: listing.sellerId,
+        status: listing.status,
+        aiDescriptionGenerationCount: listing.aiDescriptionGenerationCount,
+      })
+      .from(listing)
+      .where(eq(listing.id, parsedInput.data.listingId));
+
+    if (
+      !existingListing ||
+      existingListing.sellerId !== session.user.id ||
+      existingListing.status !== "draft"
+    ) {
+      throw new Error("Listing cannot be enhanced.");
+    }
+
+    if (
+      !hasDescriptionEnhancementRunsRemaining(
+        existingListing.aiDescriptionGenerationCount,
+      )
+    ) {
+      throw new Error("AI description limit reached for this listing.");
+    }
+
+    const nextGenerationCount =
+      existingListing.aiDescriptionGenerationCount + 1;
+
+    await tx
+      .update(listing)
+      .set({
+        aiDescriptionGenerationCount: nextGenerationCount,
+      })
+      .where(
+        and(
+          eq(listing.id, parsedInput.data.listingId),
+          eq(listing.sellerId, existingListing.sellerId),
+        ),
+      );
+
+    return {
+      remainingRuns:
+        getRemainingDescriptionEnhancementRuns(nextGenerationCount),
+    };
+  });
+
+  const result = await streamEnhancedDescription(parsedInput.data);
+  const validation = validateEnhancedDescription(
+    result.text,
+    parsedInput.data.description,
+  );
+
+  if (!validation.success) {
+    throw new Error(validation.message);
+  }
+
+  return {
+    text: validation.description,
+    remainingRuns: enhancementRequest.remainingRuns,
+  };
 }

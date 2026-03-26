@@ -1,8 +1,13 @@
 import type { infer as ZodInfer, ZodType } from "zod";
-import type { AiAdapter, GenerateStructuredObjectOptions } from "@/server/ai";
+import type {
+  AiAdapter,
+  GenerateStructuredObjectOptions,
+  GenerateTextOptions,
+} from "@/server/ai";
 
 export class MockAiAdapter implements AiAdapter {
   calls: GenerateStructuredObjectOptions<ZodType>[] = [];
+  streamTextCalls: GenerateTextOptions[] = [];
 
   constructor(private readonly result: unknown) {}
 
@@ -12,5 +17,11 @@ export class MockAiAdapter implements AiAdapter {
     this.calls.push(options as GenerateStructuredObjectOptions<ZodType>);
 
     return this.result as ZodInfer<TSchema>;
+  }
+
+  streamText(options: GenerateTextOptions): AsyncIterable<string> {
+    this.streamTextCalls.push(options);
+
+    return (async function* () {})();
   }
 }

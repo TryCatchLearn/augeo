@@ -60,7 +60,7 @@ This repository is still early-stage, but it is no longer a starter. There is al
 
 - Use TypeScript throughout.
 - Prefer server components by default. Add `"use client"` only when client-side interactivity is required.
-- Prefer server actions for authenticated mutations whenever possible. Use API routes only when the browser truly needs an HTTP endpoint, such as direct third-party uploads or machine-consumable integrations.
+- Prefer server actions for authenticated mutations whenever possible. Do not add or keep an API route if the same feature can be handled cleanly with a server action. Use API routes only when the browser truly needs an HTTP endpoint, such as direct third-party uploads or machine-consumable integrations.
 - Use the `@/` alias for imports rooted in `src/`.
 - Reuse `cn()` from `src/lib/utils.ts` for conditional class names.
 - Prefer `lucide-react` for icons instead of custom SVG icon components unless a custom brand mark is explicitly required.

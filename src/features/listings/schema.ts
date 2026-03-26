@@ -102,6 +102,66 @@ export const listingDraftFormSchema = z
 export type ListingDraftFormValues = z.infer<typeof listingDraftFormSchema>;
 export type ListingDraftFormInput = z.input<typeof listingDraftFormSchema>;
 
+export const descriptionEnhancerTones = [
+  "concise",
+  "max_hype",
+  "sarcastic",
+  "friendly",
+] as const;
+
+export type DescriptionEnhancerTone = (typeof descriptionEnhancerTones)[number];
+
+export const descriptionEnhancerToneSchema = z.enum(descriptionEnhancerTones);
+
+export const descriptionEnhancerToneLabels: Record<
+  DescriptionEnhancerTone,
+  string
+> = {
+  concise: "Concise",
+  max_hype: "Max-hype",
+  sarcastic: "Sarcastic",
+  friendly: "Friendly",
+};
+
+export const maxDescriptionEnhancementRuns = 10;
+
+export function getRemainingDescriptionEnhancementRuns(
+  aiDescriptionGenerationCount: number,
+) {
+  return Math.max(
+    0,
+    maxDescriptionEnhancementRuns - aiDescriptionGenerationCount,
+  );
+}
+
+export function hasDescriptionEnhancementRunsRemaining(
+  aiDescriptionGenerationCount: number,
+) {
+  return (
+    getRemainingDescriptionEnhancementRuns(aiDescriptionGenerationCount) > 0
+  );
+}
+
+export const descriptionEnhancerRequestSchema = z.object({
+  listingId: z.string().min(1),
+  title: z.string().trim().min(1, "Title is required."),
+  category: z.custom<ListingCategory>((value) =>
+    listingCategories.includes(value as ListingCategory),
+  ),
+  condition: z.custom<ListingCondition>((value) =>
+    listingConditions.includes(value as ListingCondition),
+  ),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Add a base description before using AI."),
+  tone: descriptionEnhancerToneSchema,
+});
+
+export type DescriptionEnhancerRequest = z.infer<
+  typeof descriptionEnhancerRequestSchema
+>;
+
 export const smartListingCreatorSchema = z.object({
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),
@@ -113,6 +173,71 @@ export const smartListingCreatorSchema = z.object({
 export type SmartListingCreatorResult = z.infer<
   typeof smartListingCreatorSchema
 >;
+
+const numericTokenPattern =
+  /\b\d+(?:[.,]\d+)?(?:["']|x|gb|tb|mb|mah|mm|cm|in|inch|inches|ft|fps|hz|v|w|mp)?\b/gi;
+
+function getNormalizedNumericTokens(value: string) {
+  return new Set(
+    Array.from(value.toLowerCase().matchAll(numericTokenPattern), (match) =>
+      match[0].replaceAll(",", ""),
+    ),
+  );
+}
+
+export function validateEnhancedDescriptionWordCount(value: string) {
+  const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
+
+  return wordCount >= 50 && wordCount <= 200;
+}
+
+export function validateEnhancedDescriptionSourceCompliance(
+  value: string,
+  sourceDescription: string,
+) {
+  const sourceTokens = getNormalizedNumericTokens(sourceDescription);
+  const generatedTokens = getNormalizedNumericTokens(value);
+
+  for (const token of generatedTokens) {
+    if (!sourceTokens.has(token)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function validateEnhancedDescription(
+  value: string,
+  sourceDescription: string,
+) {
+  const normalizedValue = value.trim();
+
+  if (!validateEnhancedDescriptionWordCount(normalizedValue)) {
+    return {
+      success: false as const,
+      message: "AI descriptions must be between 50 and 200 words.",
+    };
+  }
+
+  if (
+    !validateEnhancedDescriptionSourceCompliance(
+      normalizedValue,
+      sourceDescription,
+    )
+  ) {
+    return {
+      success: false as const,
+      message:
+        "AI description included details that were not supported by the source description.",
+    };
+  }
+
+  return {
+    success: true as const,
+    description: normalizedValue,
+  };
+}
 
 const isoDateTimeField = z
   .string()

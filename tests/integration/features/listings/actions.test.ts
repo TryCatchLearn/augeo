@@ -5,6 +5,7 @@ const hoisted = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   createDraftFromFirstUpload: vi.fn(),
   saveDraftListing: vi.fn(),
+  streamEnhancedDescription: vi.fn(),
   publishListing: vi.fn(),
   returnListingToDraft: vi.fn(),
   deleteDraftListing: vi.fn(),
@@ -19,6 +20,10 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/features/auth/session", () => ({
   getSession: hoisted.getSession,
+}));
+
+vi.mock("@/server/ai", () => ({
+  streamEnhancedDescription: hoisted.streamEnhancedDescription,
 }));
 
 vi.mock("@/features/listings/mutations", () => ({
@@ -38,6 +43,7 @@ describe("listing server actions", () => {
     hoisted.revalidatePath.mockReset();
     hoisted.createDraftFromFirstUpload.mockReset();
     hoisted.saveDraftListing.mockReset();
+    hoisted.streamEnhancedDescription.mockReset();
     hoisted.publishListing.mockReset();
     hoisted.returnListingToDraft.mockReset();
     hoisted.deleteDraftListing.mockReset();
@@ -171,6 +177,29 @@ describe("listing server actions", () => {
       endsAt: "2026-03-30T12:00:00.000Z",
     });
     expectListingRevalidation("listing-1");
+  });
+
+  it("rejects unauthenticated description-enhancement requests", async () => {
+    hoisted.getSession.mockResolvedValue(null);
+    const { enhanceListingDescriptionAction } = await loadActions();
+
+    await expect(
+      enhanceListingDescriptionAction({
+        listingId: "listing-1",
+      }),
+    ).rejects.toThrow("Unauthorized");
+  });
+
+  it("rejects invalid description-enhancement payloads", async () => {
+    hoisted.getSession.mockResolvedValue(session);
+    const { enhanceListingDescriptionAction } = await loadActions();
+
+    await expect(
+      enhanceListingDescriptionAction({
+        listingId: "",
+        title: "",
+      }),
+    ).rejects.toThrow("Invalid description-enhancement payload");
   });
 
   it("rejects unauthenticated publish requests", async () => {

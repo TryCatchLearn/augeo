@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  descriptionEnhancerRequestSchema,
   dollarsToCents,
+  getRemainingDescriptionEnhancementRuns,
+  hasDescriptionEnhancementRunsRemaining,
   listingDraftFormSchema,
   normalizeSmartListingCategory,
   normalizeSuggestedStartingPriceCents,
   saveDraftListingSchema,
+  validateEnhancedDescription,
+  validateEnhancedDescriptionWordCount,
   validateSmartListingCondition,
 } from "@/features/listings/schema";
 
@@ -107,5 +112,52 @@ describe("listing draft schemas", () => {
     expect(validateSmartListingCondition("mystery")).toBeNull();
     expect(normalizeSuggestedStartingPriceCents(1299.8)).toBe(1300);
     expect(normalizeSuggestedStartingPriceCents(0)).toBeNull();
+  });
+
+  it("validates the description enhancer request payload", () => {
+    const result = descriptionEnhancerRequestSchema.safeParse({
+      listingId: "listing-1",
+      title: "Collector Camera",
+      category: "electronics",
+      condition: "good",
+      description: "Solid tested camera body with strap and case.",
+      tone: "friendly",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("enforces the enhancer word-count rules", () => {
+    expect(validateEnhancedDescriptionWordCount("too short")).toBe(false);
+    expect(
+      validateEnhancedDescriptionWordCount(
+        new Array(60).fill("camera").join(" "),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects enhanced descriptions that introduce unsupported numeric details", () => {
+    const result = validateEnhancedDescription(
+      new Array(10)
+        .fill(
+          "This camera includes a 128GB card and clean overall presentation.",
+        )
+        .join(" "),
+      "Camera body with strap and case.",
+    );
+
+    expect(result).toEqual({
+      success: false,
+      message:
+        "AI description included details that were not supported by the source description.",
+    });
+  });
+
+  it("tracks remaining description-enhancement runs", () => {
+    expect(getRemainingDescriptionEnhancementRuns(0)).toBe(10);
+    expect(getRemainingDescriptionEnhancementRuns(9)).toBe(1);
+    expect(getRemainingDescriptionEnhancementRuns(10)).toBe(0);
+    expect(hasDescriptionEnhancementRunsRemaining(9)).toBe(true);
+    expect(hasDescriptionEnhancementRunsRemaining(10)).toBe(false);
   });
 });

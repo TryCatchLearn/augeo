@@ -1,7 +1,10 @@
 import { createGateway } from "@ai-sdk/gateway";
-import { generateObject } from "ai";
+import { generateObject, streamText } from "ai";
 import type { ZodType } from "zod";
-import { smartListingCreatorSchema } from "@/features/listings/schema";
+import {
+  type DescriptionEnhancerTone,
+  smartListingCreatorSchema,
+} from "@/features/listings/schema";
 import { getRequiredEnv } from "@/lib/env";
 
 const primaryModelId = "google/gemini-2.5-flash-lite";
@@ -20,7 +23,14 @@ export interface AiAdapter {
   generateStructuredObject<TSchema extends ZodType>(
     options: GenerateStructuredObjectOptions<TSchema>,
   ): Promise<import("zod").infer<TSchema>>;
+  streamText?(options: GenerateTextOptions): AsyncIterable<string>;
 }
+
+export type GenerateTextOptions = {
+  modelId: string;
+  system: string;
+  prompt: string;
+};
 
 class GatewayAiAdapter implements AiAdapter {
   async generateStructuredObject<TSchema extends ZodType>(
@@ -50,6 +60,20 @@ class GatewayAiAdapter implements AiAdapter {
     });
 
     return result.object as import("zod").infer<TSchema>;
+  }
+
+  streamText(options: GenerateTextOptions): AsyncIterable<string> {
+    const gateway = createGateway({
+      apiKey: getRequiredEnv("AI_GATEWAY_API_KEY"),
+    });
+
+    const result = streamText({
+      model: gateway(options.modelId),
+      system: options.system,
+      prompt: options.prompt,
+    });
+
+    return result.textStream;
   }
 }
 
@@ -83,6 +107,47 @@ function buildSmartListingCreatorPrompt() {
     "The title should be specific but not overly long.",
     "The description should be sarcastic, humerous and based only on visible evidence from the image.",
   ].join(" ");
+}
+
+const descriptionToneInstructions: Record<DescriptionEnhancerTone, string> = {
+  concise:
+    "Keep the voice tight, direct, and efficient while still sounding natural.",
+  max_hype:
+    "Lean energetic and sales-forward, but stay believable and grounded in the source text.",
+  sarcastic:
+    "Use dry, playful sarcasm without becoming mean or inventing facts.",
+  friendly:
+    "Sound warm, conversational, and helpful without overhyping the item.",
+};
+
+export function buildDescriptionEnhancerSystemPrompt(
+  tone: DescriptionEnhancerTone,
+) {
+  return [
+    "You improve seller-written auction descriptions.",
+    "Write 50 to 200 words.",
+    descriptionToneInstructions[tone],
+    "Use only the provided listing title, category, condition, and source description.",
+    "Do not invent features, accessories, specs, defects, provenance, measurements, included items, or condition details that are not already present in the source description.",
+  ].join(" ");
+}
+
+export function buildDescriptionEnhancerPrompt(input: {
+  title: string;
+  category: string;
+  condition: string;
+  description: string;
+  tone: DescriptionEnhancerTone;
+}) {
+  return [
+    `Tone: ${input.tone}`,
+    `Title: ${input.title}`,
+    `Category: ${input.category}`,
+    `Condition: ${input.condition}`,
+    "Source description:",
+    input.description,
+    "Rewrite the source description using only those details.",
+  ].join("\n");
 }
 
 async function generateStructuredObjectWithFallback<TSchema extends ZodType>(
@@ -122,5 +187,68 @@ export async function generateSmartListingFromImage(
     system: buildSmartListingCreatorSystemPrompt(),
     prompt: buildSmartListingCreatorPrompt(),
     imageUrls: [imageUrl],
+  });
+}
+
+export async function streamEnhancedDescription(
+  input: {
+    title: string;
+    category: string;
+    condition: string;
+    description: string;
+    tone: DescriptionEnhancerTone;
+  },
+  options?: {
+    adapter?: AiAdapter;
+    onTextDelta?: (delta: string) => Promise<void> | void;
+  },
+) {
+  const adapter = options?.adapter ?? defaultAdapter;
+
+  if (!adapter.streamText) {
+    throw new AiGenerationError("Streaming AI generation is not available.");
+  }
+
+  const sharedOptions = {
+    system: buildDescriptionEnhancerSystemPrompt(input.tone),
+    prompt: buildDescriptionEnhancerPrompt(input),
+  };
+  let lastError: unknown;
+
+  for (const modelId of [primaryModelId, fallbackModelId]) {
+    let generatedText = "";
+    let receivedText = false;
+
+    try {
+      for await (const delta of adapter.streamText({
+        modelId,
+        ...sharedOptions,
+      })) {
+        if (!delta) {
+          continue;
+        }
+
+        receivedText = true;
+        generatedText += delta;
+        await options?.onTextDelta?.(delta);
+      }
+
+      return {
+        text: generatedText,
+        modelId,
+      };
+    } catch (error) {
+      lastError = error;
+
+      if (receivedText || modelId === fallbackModelId) {
+        throw new AiGenerationError("AI description enhancement failed.", {
+          cause: error,
+        });
+      }
+    }
+  }
+
+  throw new AiGenerationError("Both AI models failed.", {
+    cause: lastError,
   });
 }

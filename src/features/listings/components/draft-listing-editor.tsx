@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { SparklesIcon, WandSparklesIcon } from "lucide-react";
+import { LoaderCircleIcon, SparklesIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -25,15 +25,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { saveDraftListingAction } from "@/features/listings/actions";
+import {
+  enhanceListingDescriptionAction,
+  saveDraftListingAction,
+} from "@/features/listings/actions";
 import {
   type ListingStatus,
   listingCategories,
   listingConditions,
 } from "@/features/listings/domain";
 import {
+  descriptionEnhancerToneLabels,
+  descriptionEnhancerTones,
   dollarsToCents,
   formatDateTimeLocalInput,
+  getRemainingDescriptionEnhancementRuns,
   type ListingDraftFormInput,
   type ListingDraftFormValues,
   listingDraftFormSchema,
@@ -51,10 +57,35 @@ type DraftListingEditorProps = {
     status: ListingStatus;
     startingBidCents: number;
     reservePriceCents: number | null;
+    aiDescriptionGenerationCount: number;
     startsAt: Date | null;
     endsAt: Date;
   };
 };
+
+type DescriptionEnhancementTone = (typeof descriptionEnhancerTones)[number];
+
+type DescriptionEnhancementState =
+  | {
+      status: "idle";
+      preview: string;
+      errorMessage: string | null;
+    }
+  | {
+      status: "generating";
+      preview: string;
+      errorMessage: string | null;
+    }
+  | {
+      status: "ready";
+      preview: string;
+      errorMessage: null;
+    }
+  | {
+      status: "error";
+      preview: string;
+      errorMessage: string;
+    };
 
 function formatMoneyInput(cents: number | null) {
   if (cents === null) {
@@ -64,14 +95,34 @@ function formatMoneyInput(cents: number | null) {
   return Number((cents / 100).toFixed(2));
 }
 
+function createIdleEnhancementState(): DescriptionEnhancementState {
+  return {
+    status: "idle",
+    preview: "",
+    errorMessage: null,
+  };
+}
+
 export function DraftListingEditor({ listing }: DraftListingEditorProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedTone, setSelectedTone] =
+    useState<DescriptionEnhancementTone>("friendly");
+  const [remainingRuns, setRemainingRuns] = useState(
+    getRemainingDescriptionEnhancementRuns(
+      listing.aiDescriptionGenerationCount,
+    ),
+  );
+  const [enhancementState, setEnhancementState] =
+    useState<DescriptionEnhancementState>(createIdleEnhancementState);
   const {
     register,
     control,
     handleSubmit,
+    setValue,
+    watch,
     setError,
+    clearErrors,
     formState: { errors },
   } = useForm<ListingDraftFormInput, unknown, ListingDraftFormValues>({
     resolver: zodResolver(listingDraftFormSchema),
@@ -87,6 +138,55 @@ export function DraftListingEditor({ listing }: DraftListingEditorProps) {
       endsAt: formatDateTimeLocalInput(listing.endsAt),
     },
   });
+  const [title, category, condition, description] = watch([
+    "title",
+    "category",
+    "condition",
+    "description",
+  ]);
+
+  const isGenerating = enhancementState.status === "generating";
+  const hasReadyPreview = enhancementState.status === "ready";
+  const hasPreviewPanel =
+    enhancementState.status !== "idle" ||
+    enhancementState.preview.length > 0 ||
+    Boolean(enhancementState.errorMessage);
+  const limitReached = remainingRuns <= 0;
+
+  async function runDescriptionEnhancement() {
+    try {
+      setEnhancementState({
+        status: "generating",
+        preview: "",
+        errorMessage: null,
+      });
+
+      const result = await enhanceListingDescriptionAction({
+        listingId: listing.id,
+        title,
+        category,
+        condition,
+        description,
+        tone: selectedTone,
+      });
+
+      setRemainingRuns(result.remainingRuns);
+      setEnhancementState({
+        status: "ready",
+        preview: result.text,
+        errorMessage: null,
+      });
+    } catch (error) {
+      setEnhancementState({
+        status: "error",
+        preview: "",
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : "Unable to enhance the description right now.",
+      });
+    }
+  }
 
   const onSubmit = handleSubmit(async (values) => {
     try {
@@ -363,40 +463,133 @@ export function DraftListingEditor({ listing }: DraftListingEditorProps) {
           <CardContent className="space-y-4 px-6 pb-6">
             <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
               <p className="text-sm leading-7 text-muted-foreground">
-                Placeholder controls for AI-assisted description improvements
-                will live here in a later phase.
+                Generate a rewritten draft description in a chosen tone. The
+                preview stays separate until you accept it, and saving is still
+                controlled by the main form.
               </p>
             </div>
+
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="description-enhancer-tone">
+                  Tone
+                </FieldLabel>
+                <FieldContent>
+                  <Select
+                    value={selectedTone}
+                    onValueChange={(value) => {
+                      if (value) {
+                        setSelectedTone(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="description-enhancer-tone">
+                      <SelectValue placeholder="Select a tone" />
+                      <SelectIcon />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {descriptionEnhancerTones.map((tone) => (
+                        <SelectItem key={tone} value={tone}>
+                          {descriptionEnhancerToneLabels[tone]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    {limitReached
+                      ? "AI run limit reached for this draft."
+                      : `${remainingRuns} AI run${remainingRuns === 1 ? "" : "s"} remaining.`}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
             <Button
               type="button"
               size="lg"
               variant="outline"
-              disabled
+              disabled={limitReached || isGenerating}
               className="w-full"
+              onClick={() => {
+                void runDescriptionEnhancement();
+              }}
             >
-              <SparklesIcon data-icon="inline-start" />
-              Improve Clarity
+              {isGenerating ? (
+                <LoaderCircleIcon
+                  data-icon="inline-start"
+                  className="animate-spin"
+                />
+              ) : (
+                <SparklesIcon data-icon="inline-start" />
+              )}
+              Refine description with AI
             </Button>
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              disabled
-              className="w-full"
-            >
-              <WandSparklesIcon data-icon="inline-start" />
-              Add Material Details
-            </Button>
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              disabled
-              className="w-full"
-            >
-              <SparklesIcon data-icon="inline-start" />
-              Highlight Condition Notes
-            </Button>
+
+            {hasPreviewPanel ? (
+              <div className="space-y-4 rounded-[1.5rem] border border-border/70 bg-muted/20 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Preview</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isGenerating
+                      ? "Generating a draft rewrite now."
+                      : "Review this version before accepting it into the form."}
+                  </p>
+                </div>
+
+                {enhancementState.preview ? (
+                  <div className="rounded-2xl bg-background p-4 text-sm leading-7 whitespace-pre-wrap">
+                    {enhancementState.preview}
+                  </div>
+                ) : null}
+
+                {enhancementState.errorMessage ? (
+                  <p className="text-sm text-destructive">
+                    {enhancementState.errorMessage}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={limitReached || isGenerating}
+                    onClick={() => {
+                      void runDescriptionEnhancement();
+                    }}
+                  >
+                    <SparklesIcon data-icon="inline-start" />
+                    Regenerate
+                  </Button>
+
+                  {hasReadyPreview ? (
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setValue("description", enhancementState.preview, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        clearErrors("description");
+                        setEnhancementState(createIdleEnhancementState());
+                      }}
+                    >
+                      Accept
+                    </Button>
+                  ) : null}
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={isGenerating}
+                    onClick={() => {
+                      setEnhancementState(createIdleEnhancementState());
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
