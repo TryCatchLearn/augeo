@@ -1,28 +1,11 @@
 "use client";
 
-export type UploadSignatureResponse = {
-  cloudName: string;
-  apiKey: string;
-  folder: string;
-  timestamp: number;
-  signature: string;
-};
-
-export async function requestListingImageUploadSignature() {
-  const signatureResponse = await fetch("/api/upload-signature", {
-    method: "POST",
-  });
-
-  if (!signatureResponse.ok) {
-    throw new Error("Unable to prepare the image upload.");
-  }
-
-  return (await signatureResponse.json()) as UploadSignatureResponse;
-}
+import { createListingImageUploadSignatureAction } from "@/features/listings/actions";
+import type { CloudinaryUploadSignature } from "@/server/cloudinary";
 
 export async function uploadListingImageToCloudinary(
   file: File,
-  signedParams: UploadSignatureResponse,
+  signedParams: CloudinaryUploadSignature,
   onProgress: (percent: number) => void,
 ) {
   const formData = new FormData();
@@ -66,4 +49,19 @@ export async function uploadListingImageToCloudinary(
       request.send(formData);
     },
   );
+}
+
+export function useListingImageUpload() {
+  async function uploadImage(
+    file: File,
+    onProgress: (percent: number) => void,
+  ) {
+    const signedParams = await createListingImageUploadSignatureAction();
+
+    return uploadListingImageToCloudinary(file, signedParams, onProgress);
+  }
+
+  return {
+    uploadImage,
+  };
 }

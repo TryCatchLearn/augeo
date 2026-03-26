@@ -13,9 +13,9 @@ import {
   canDeleteListing,
   canPublishListing,
   canReturnToDraft,
-  formatListingPrice,
   type ListingStatus,
 } from "@/features/listings/domain";
+import { formatListingPrice } from "@/features/listings/utils";
 
 type ListingSellerControlsProps = {
   listing: {

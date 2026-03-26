@@ -40,6 +40,20 @@ export type ListingDetailData = {
   }>;
 };
 
+export type OwnedListingRecord = {
+  id: string;
+  sellerId: string;
+  status: ListingStatus;
+  startsAt: Date | null;
+  aiDescriptionGenerationCount: number;
+};
+
+export type ListingImageAssetRecord = {
+  id: string;
+  publicId: string;
+  isMain: boolean;
+};
+
 type Database = LibSQLDatabase<typeof schema>;
 
 async function resolveDatabase(database?: Database) {
@@ -193,4 +207,40 @@ export async function getListingDetailForViewer(
   }
 
   return result;
+}
+
+export async function getOwnedListing(
+  sellerId: string,
+  listingId: string,
+  database?: Database,
+): Promise<OwnedListingRecord | null> {
+  const resolvedDatabase = await resolveDatabase(database);
+  const [record] = await resolvedDatabase
+    .select({
+      id: listing.id,
+      sellerId: listing.sellerId,
+      status: listing.status,
+      startsAt: listing.startsAt,
+      aiDescriptionGenerationCount: listing.aiDescriptionGenerationCount,
+    })
+    .from(listing)
+    .where(and(eq(listing.id, listingId), eq(listing.sellerId, sellerId)));
+
+  return record ?? null;
+}
+
+export async function listListingImageAssets(
+  listingId: string,
+  database?: Database,
+): Promise<ListingImageAssetRecord[]> {
+  const resolvedDatabase = await resolveDatabase(database);
+
+  return resolvedDatabase
+    .select({
+      id: listingImage.id,
+      publicId: listingImage.publicId,
+      isMain: listingImage.isMain,
+    })
+    .from(listingImage)
+    .where(eq(listingImage.listingId, listingId));
 }

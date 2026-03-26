@@ -23,4 +23,14 @@ export async function requireSession(redirectTo?: string) {
   return session;
 }
 
+export async function requireAuthenticatedSession() {
+  const session = await getSession();
+
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
+  return session;
+}
+
 export type AppSession = NonNullable<Awaited<ReturnType<typeof getSession>>>;

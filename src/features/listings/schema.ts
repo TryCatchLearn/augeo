@@ -162,6 +162,16 @@ export type DescriptionEnhancerRequest = z.infer<
   typeof descriptionEnhancerRequestSchema
 >;
 
+export const createDraftFromFirstUploadSchema = z.object({
+  uploadPublicId: z.string().min(1),
+  uploadUrl: z.url(),
+  creationMode: z.enum(["ai", "manual"]),
+});
+
+export type CreateDraftFromFirstUploadInput = z.infer<
+  typeof createDraftFromFirstUploadSchema
+>;
+
 export const smartListingCreatorSchema = z.object({
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),
@@ -277,122 +287,10 @@ export const addListingImageSchema = z.object({
   uploadUrl: z.url(),
 });
 
-const listingCategoryAliases: Record<string, ListingCategory> = {
-  art: "art",
-  collectible: "collectibles",
-  collectibles: "collectibles",
-  electronics: "electronics",
-  electronic: "electronics",
-  fashion: "fashion",
-  clothing: "fashion",
-  home: "home_garden",
-  home_garden: "home_garden",
-  home_and_garden: "home_garden",
-  "home & garden": "home_garden",
-  "home and garden": "home_garden",
-  jewelry: "jewelry_watches",
-  jewelry_watches: "jewelry_watches",
-  watches: "jewelry_watches",
-  media: "media",
-  movies: "media",
-  music: "media",
-  other: "other",
-  sports: "sports_outdoors",
-  outdoors: "sports_outdoors",
-  sports_outdoors: "sports_outdoors",
-  toys: "toys_hobbies",
-  hobbies: "toys_hobbies",
-  toys_hobbies: "toys_hobbies",
-  vehicle: "vehicles",
-  vehicles: "vehicles",
-  automotive: "vehicles",
-  auto: "vehicles",
-};
-
-const listingConditionAliases: Record<string, ListingCondition> = {
-  new: "new",
-  brand_new: "new",
-  "brand new": "new",
-  like_new: "like_new",
-  "like new": "like_new",
-  excellent: "like_new",
-  good: "good",
-  fair: "fair",
-  poor: "poor",
-  used_good: "good",
-  used_fair: "fair",
-};
-
-function normalizeEnumInput(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replaceAll("&", "and")
-    .replaceAll("/", " ")
-    .replaceAll("-", "_")
-    .replace(/\s+/g, "_");
-}
-
-export function normalizeSmartListingCategory(value: string): ListingCategory {
-  const normalizedValue = normalizeEnumInput(value);
-
-  return (
-    listingCategoryAliases[normalizedValue] ??
-    (listingCategories.includes(normalizedValue as ListingCategory)
-      ? (normalizedValue as ListingCategory)
-      : "other")
-  );
-}
-
-export function validateSmartListingCondition(
-  value: string,
-): ListingCondition | null {
-  const normalizedValue = normalizeEnumInput(value);
-
-  return (
-    listingConditionAliases[normalizedValue] ??
-    (listingConditions.includes(normalizedValue as ListingCondition)
-      ? (normalizedValue as ListingCondition)
-      : null)
-  );
-}
-
-export function normalizeSuggestedStartingPriceCents(value: number) {
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
-  const cents = Math.round(value);
-
-  return cents > 0 ? cents : null;
-}
-
 export function validateListingImageCount(imageCount: number) {
   if (imageCount >= maxListingImageCount) {
     throw new Error(
       `Listings can include up to ${maxListingImageCount} images.`,
     );
   }
-}
-
-export function dollarsToCents(value: number) {
-  return Math.round(value * 100);
-}
-
-export function localDateTimeToIsoString(value: string) {
-  return new Date(value).toISOString();
-}
-
-export function formatDateTimeLocalInput(value: Date | null) {
-  if (!value) {
-    return "";
-  }
-
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  const hours = String(value.getHours()).padStart(2, "0");
-  const minutes = String(value.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }

@@ -1,17 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => ({
-  getSession: vi.fn(),
+  requireAuthenticatedSession: vi.fn(),
   revalidatePath: vi.fn(),
-  createDraftFromFirstUpload: vi.fn(),
-  saveDraftListing: vi.fn(),
+  createListingImageUploadSignature: vi.fn(),
+  deleteCloudinaryAssets: vi.fn(),
+  generateSmartListingFromImage: vi.fn(),
   streamEnhancedDescription: vi.fn(),
-  publishListing: vi.fn(),
-  returnListingToDraft: vi.fn(),
-  deleteDraftListing: vi.fn(),
-  addListingImage: vi.fn(),
+  insertDraftWithMainImage: vi.fn(),
+  updateDraftListing: vi.fn(),
+  updateListingStatus: vi.fn(),
+  deleteDraftListingRecords: vi.fn(),
+  insertListingImage: vi.fn(),
   setMainListingImage: vi.fn(),
-  deleteListingImage: vi.fn(),
+  deleteListingImageRecord: vi.fn(),
+  incrementListingDescriptionGenerationCount: vi.fn(),
+  getOwnedListing: vi.fn(),
+  listListingImageAssets: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -19,43 +24,55 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/features/auth/session", () => ({
-  getSession: hoisted.getSession,
+  requireAuthenticatedSession: hoisted.requireAuthenticatedSession,
 }));
 
-vi.mock("@/server/ai", () => ({
-  streamEnhancedDescription: hoisted.streamEnhancedDescription,
+vi.mock("@/server/cloudinary", () => ({
+  createListingImageUploadSignature: hoisted.createListingImageUploadSignature,
+  deleteCloudinaryAssets: hoisted.deleteCloudinaryAssets,
 }));
+
+vi.mock("@/server/ai", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/server/ai")>("@/server/ai");
+
+  return {
+    ...actual,
+    generateSmartListingFromImage: hoisted.generateSmartListingFromImage,
+    streamEnhancedDescription: hoisted.streamEnhancedDescription,
+  };
+});
 
 vi.mock("@/features/listings/mutations", () => ({
-  createDraftFromFirstUpload: hoisted.createDraftFromFirstUpload,
-  saveDraftListing: hoisted.saveDraftListing,
-  publishListing: hoisted.publishListing,
-  returnListingToDraft: hoisted.returnListingToDraft,
-  deleteDraftListing: hoisted.deleteDraftListing,
-  addListingImage: hoisted.addListingImage,
+  insertDraftWithMainImage: hoisted.insertDraftWithMainImage,
+  updateDraftListing: hoisted.updateDraftListing,
+  updateListingStatus: hoisted.updateListingStatus,
+  deleteDraftListingRecords: hoisted.deleteDraftListingRecords,
+  insertListingImage: hoisted.insertListingImage,
   setMainListingImage: hoisted.setMainListingImage,
-  deleteListingImage: hoisted.deleteListingImage,
+  deleteListingImageRecord: hoisted.deleteListingImageRecord,
+  incrementListingDescriptionGenerationCount:
+    hoisted.incrementListingDescriptionGenerationCount,
+}));
+
+vi.mock("@/features/listings/queries", () => ({
+  getOwnedListing: hoisted.getOwnedListing,
+  listListingImageAssets: hoisted.listListingImageAssets,
 }));
 
 describe("listing server actions", () => {
-  beforeEach(() => {
-    hoisted.getSession.mockReset();
-    hoisted.revalidatePath.mockReset();
-    hoisted.createDraftFromFirstUpload.mockReset();
-    hoisted.saveDraftListing.mockReset();
-    hoisted.streamEnhancedDescription.mockReset();
-    hoisted.publishListing.mockReset();
-    hoisted.returnListingToDraft.mockReset();
-    hoisted.deleteDraftListing.mockReset();
-    hoisted.addListingImage.mockReset();
-    hoisted.setMainListingImage.mockReset();
-    hoisted.deleteListingImage.mockReset();
-  });
-
   const session = {
     user: { id: "seller-1" },
     session: { id: "session-1" },
   };
+
+  beforeEach(() => {
+    Object.values(hoisted).forEach((value) => {
+      if (typeof value === "function" && "mockReset" in value) {
+        value.mockReset();
+      }
+    });
+  });
 
   async function loadActions() {
     return import("@/features/listings/actions");
@@ -71,7 +88,9 @@ describe("listing server actions", () => {
   }
 
   it("rejects unauthenticated create-draft requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
+    hoisted.requireAuthenticatedSession.mockRejectedValue(
+      new Error("Unauthorized"),
+    );
     const { createDraftFromFirstUploadAction } = await loadActions();
 
     await expect(
@@ -83,25 +102,36 @@ describe("listing server actions", () => {
     ).rejects.toThrow("Unauthorized");
   });
 
-  it("rejects invalid create-draft payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { createDraftFromFirstUploadAction } = await loadActions();
+  it("creates a signed upload response for authenticated requests", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.createListingImageUploadSignature.mockReturnValue({
+      cloudName: "demo-cloud",
+      apiKey: "demo-key",
+      folder: "augeo/listings",
+      timestamp: 1763611200,
+      signature: "signed-payload",
+    });
+    const { createListingImageUploadSignatureAction } = await loadActions();
 
-    await expect(
-      createDraftFromFirstUploadAction({
-        uploadPublicId: "",
-        uploadUrl: "invalid-url",
-        creationMode: "ai",
-      }),
-    ).rejects.toThrow("Invalid draft payload");
+    await expect(createListingImageUploadSignatureAction()).resolves.toEqual({
+      cloudName: "demo-cloud",
+      apiKey: "demo-key",
+      folder: "augeo/listings",
+      timestamp: 1763611200,
+      signature: "signed-payload",
+    });
   });
 
-  it("creates a draft with the authenticated seller id", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.createDraftFromFirstUpload.mockResolvedValue({
-      id: "listing-1",
-      status: "created",
+  it("creates a draft with AI-derived defaults", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.generateSmartListingFromImage.mockResolvedValue({
+      title: "Camera",
+      description: "Clean body and case.",
+      category: "electronics",
+      condition: "good",
+      suggestedStartingPriceCents: 18000,
     });
+    hoisted.insertDraftWithMainImage.mockResolvedValue({ id: "listing-1" });
     const { createDraftFromFirstUploadAction } = await loadActions();
 
     await expect(
@@ -112,40 +142,25 @@ describe("listing server actions", () => {
       }),
     ).resolves.toEqual({ status: "created", listingId: "listing-1" });
 
-    expect(hoisted.createDraftFromFirstUpload).toHaveBeenCalledWith({
+    expect(hoisted.insertDraftWithMainImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sellerId: "seller-1",
+        uploadPublicId: "image-1",
+        uploadUrl: "https://example.com/image.jpg",
+      }),
+    );
+  });
+
+  it("saves drafts after ownership checks and revalidates listing paths", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.getOwnedListing.mockResolvedValue({
+      id: "listing-1",
       sellerId: "seller-1",
-      uploadPublicId: "image-1",
-      uploadUrl: "https://example.com/image.jpg",
-      creationMode: "ai",
+      status: "draft",
+      startsAt: null,
+      aiDescriptionGenerationCount: 0,
     });
-  });
-
-  it("rejects unauthenticated save-draft requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { saveDraftListingAction } = await loadActions();
-
-    await expect(
-      saveDraftListingAction({
-        listingId: "listing-1",
-      }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid save-draft payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { saveDraftListingAction } = await loadActions();
-
-    await expect(
-      saveDraftListingAction({
-        listingId: "",
-        title: "",
-      }),
-    ).rejects.toThrow("Invalid draft payload");
-  });
-
-  it("saves drafts and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.saveDraftListing.mockResolvedValue({ id: "listing-1" });
+    hoisted.updateDraftListing.mockResolvedValue({ id: "listing-1" });
     const { saveDraftListingAction } = await loadActions();
 
     await expect(
@@ -163,8 +178,7 @@ describe("listing server actions", () => {
       }),
     ).resolves.toEqual({ listingId: "listing-1" });
 
-    expect(hoisted.saveDraftListing).toHaveBeenCalledWith({
-      sellerId: "seller-1",
+    expect(hoisted.updateDraftListing).toHaveBeenCalledWith({
       listingId: "listing-1",
       title: "Refined Camera",
       description: "Updated",
@@ -179,50 +193,16 @@ describe("listing server actions", () => {
     expectListingRevalidation("listing-1");
   });
 
-  it("rejects unauthenticated description-enhancement requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { enhanceListingDescriptionAction } = await loadActions();
-
-    await expect(
-      enhanceListingDescriptionAction({
-        listingId: "listing-1",
-      }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid description-enhancement payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { enhanceListingDescriptionAction } = await loadActions();
-
-    await expect(
-      enhanceListingDescriptionAction({
-        listingId: "",
-        title: "",
-      }),
-    ).rejects.toThrow("Invalid description-enhancement payload");
-  });
-
-  it("rejects unauthenticated publish requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { publishListingAction } = await loadActions();
-
-    await expect(
-      publishListingAction({ listingId: "listing-1" }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid publish payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { publishListingAction } = await loadActions();
-
-    await expect(publishListingAction({ listingId: "" })).rejects.toThrow(
-      "Invalid publish payload",
-    );
-  });
-
   it("publishes listings and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.publishListing.mockResolvedValue({
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.getOwnedListing.mockResolvedValue({
+      id: "listing-1",
+      sellerId: "seller-1",
+      status: "draft",
+      startsAt: null,
+      aiDescriptionGenerationCount: 0,
+    });
+    hoisted.updateListingStatus.mockResolvedValue({
       id: "listing-1",
       status: "active",
     });
@@ -232,113 +212,52 @@ describe("listing server actions", () => {
       publishListingAction({ listingId: "listing-1" }),
     ).resolves.toEqual({ listingId: "listing-1", status: "active" });
 
-    expect(hoisted.publishListing).toHaveBeenCalledWith({
+    expect(hoisted.updateListingStatus).toHaveBeenCalledWith({
       listingId: "listing-1",
-      sellerId: "seller-1",
+      status: "active",
     });
     expectListingRevalidation("listing-1");
   });
 
-  it("rejects unauthenticated return-to-draft requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { returnListingToDraftAction } = await loadActions();
-
-    await expect(
-      returnListingToDraftAction({ listingId: "listing-1" }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid return-to-draft payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { returnListingToDraftAction } = await loadActions();
-
-    await expect(returnListingToDraftAction({ listingId: "" })).rejects.toThrow(
-      "Invalid return-to-draft payload",
-    );
-  });
-
-  it("returns listings to draft and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.returnListingToDraft.mockResolvedValue({
+  it("deletes drafts after Cloudinary cleanup and revalidates", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.getOwnedListing.mockResolvedValue({
       id: "listing-1",
-      status: "draft",
-    });
-    const { returnListingToDraftAction } = await loadActions();
-
-    await expect(
-      returnListingToDraftAction({ listingId: "listing-1" }),
-    ).resolves.toEqual({ listingId: "listing-1", status: "draft" });
-
-    expect(hoisted.returnListingToDraft).toHaveBeenCalledWith({
-      listingId: "listing-1",
       sellerId: "seller-1",
+      status: "draft",
+      startsAt: null,
+      aiDescriptionGenerationCount: 0,
     });
-    expectListingRevalidation("listing-1");
-  });
-
-  it("rejects unauthenticated delete-draft requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { deleteDraftListingAction } = await loadActions();
-
-    await expect(
-      deleteDraftListingAction({ listingId: "listing-1" }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid delete-draft payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { deleteDraftListingAction } = await loadActions();
-
-    await expect(deleteDraftListingAction({ listingId: "" })).rejects.toThrow(
-      "Invalid delete payload",
-    );
-  });
-
-  it("deletes drafts and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.deleteDraftListing.mockResolvedValue({ id: "listing-1" });
+    hoisted.listListingImageAssets.mockResolvedValue([
+      { id: "image-1", publicId: "listing/cover", isMain: true },
+    ]);
+    hoisted.deleteDraftListingRecords.mockResolvedValue({ id: "listing-1" });
     const { deleteDraftListingAction } = await loadActions();
 
     await expect(
       deleteDraftListingAction({ listingId: "listing-1" }),
     ).resolves.toEqual({ listingId: "listing-1" });
 
-    expect(hoisted.deleteDraftListing).toHaveBeenCalledWith({
-      listingId: "listing-1",
-      sellerId: "seller-1",
-    });
+    expect(hoisted.deleteCloudinaryAssets).toHaveBeenCalledWith([
+      "listing/cover",
+    ]);
+    expect(hoisted.deleteDraftListingRecords).toHaveBeenCalledWith("listing-1");
     expectListingRevalidation("listing-1");
   });
 
-  it("rejects unauthenticated add-image requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { addListingImageAction } = await loadActions();
-
-    await expect(
-      addListingImageAction({
-        listingId: "listing-1",
-        uploadPublicId: "image-2",
-        uploadUrl: "https://example.com/detail.jpg",
-      }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid add-image payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { addListingImageAction } = await loadActions();
-
-    await expect(
-      addListingImageAction({
-        listingId: "",
-        uploadPublicId: "",
-        uploadUrl: "invalid-url",
-      }),
-    ).rejects.toThrow("Invalid add-image payload");
-  });
-
-  it("adds images and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.addListingImage.mockResolvedValue({
+  it("adds listing images after validating ownership and image count", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.getOwnedListing.mockResolvedValue({
+      id: "listing-1",
+      sellerId: "seller-1",
+      status: "draft",
+      startsAt: null,
+      aiDescriptionGenerationCount: 0,
+    });
+    hoisted.listListingImageAssets.mockResolvedValue([
+      { id: "image-1", publicId: "listing/cover", isMain: true },
+    ]);
+    hoisted.insertListingImage.mockResolvedValue({
       id: "image-2",
       listingId: "listing-1",
     });
@@ -347,93 +266,87 @@ describe("listing server actions", () => {
     await expect(
       addListingImageAction({
         listingId: "listing-1",
-        uploadPublicId: "image-2",
+        uploadPublicId: "listing/detail",
         uploadUrl: "https://example.com/detail.jpg",
       }),
     ).resolves.toEqual({ listingId: "listing-1", imageId: "image-2" });
 
-    expect(hoisted.addListingImage).toHaveBeenCalledWith({
+    expect(hoisted.insertListingImage).toHaveBeenCalledWith({
       listingId: "listing-1",
-      sellerId: "seller-1",
-      uploadPublicId: "image-2",
+      uploadPublicId: "listing/detail",
       uploadUrl: "https://example.com/detail.jpg",
+      isMain: false,
     });
     expectListingRevalidation("listing-1");
   });
 
-  it("rejects unauthenticated set-main requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { setMainListingImageAction } = await loadActions();
-
-    await expect(
-      setMainListingImageAction({ listingId: "listing-1", imageId: "image-2" }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid set-main payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { setMainListingImageAction } = await loadActions();
-
-    await expect(
-      setMainListingImageAction({ listingId: "", imageId: "" }),
-    ).rejects.toThrow("Invalid set-main payload");
-  });
-
-  it("sets the main image and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.setMainListingImage.mockResolvedValue({
-      id: "image-2",
-      listingId: "listing-1",
-    });
-    const { setMainListingImageAction } = await loadActions();
-
-    await expect(
-      setMainListingImageAction({ listingId: "listing-1", imageId: "image-2" }),
-    ).resolves.toEqual({ listingId: "listing-1", imageId: "image-2" });
-
-    expect(hoisted.setMainListingImage).toHaveBeenCalledWith({
-      listingId: "listing-1",
-      imageId: "image-2",
+  it("deletes listing images after Cloudinary cleanup and revalidates", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.getOwnedListing.mockResolvedValue({
+      id: "listing-1",
       sellerId: "seller-1",
+      status: "draft",
+      startsAt: null,
+      aiDescriptionGenerationCount: 0,
+    });
+    hoisted.listListingImageAssets.mockResolvedValue([
+      { id: "image-1", publicId: "listing/cover", isMain: true },
+      { id: "image-2", publicId: "listing/detail", isMain: false },
+    ]);
+    hoisted.deleteListingImageRecord.mockResolvedValue({ id: "image-1" });
+    const { deleteListingImageAction } = await loadActions();
+
+    await expect(
+      deleteListingImageAction({
+        listingId: "listing-1",
+        imageId: "image-1",
+      }),
+    ).resolves.toEqual({ listingId: "listing-1", imageId: "image-1" });
+
+    expect(hoisted.deleteCloudinaryAssets).toHaveBeenCalledWith([
+      "listing/cover",
+    ]);
+    expect(hoisted.deleteListingImageRecord).toHaveBeenCalledWith({
+      imageId: "image-1",
+      nextMainImageId: "image-2",
     });
     expectListingRevalidation("listing-1");
   });
 
-  it("rejects unauthenticated delete-image requests", async () => {
-    hoisted.getSession.mockResolvedValue(null);
-    const { deleteListingImageAction } = await loadActions();
-
-    await expect(
-      deleteListingImageAction({ listingId: "listing-1", imageId: "image-2" }),
-    ).rejects.toThrow("Unauthorized");
-  });
-
-  it("rejects invalid delete-image payloads", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    const { deleteListingImageAction } = await loadActions();
-
-    await expect(
-      deleteListingImageAction({ listingId: "", imageId: "" }),
-    ).rejects.toThrow("Invalid delete-image payload");
-  });
-
-  it("deletes images and revalidates listing paths", async () => {
-    hoisted.getSession.mockResolvedValue(session);
-    hoisted.deleteListingImage.mockResolvedValue({
-      id: "image-2",
-      listingId: "listing-1",
-    });
-    const { deleteListingImageAction } = await loadActions();
-
-    await expect(
-      deleteListingImageAction({ listingId: "listing-1", imageId: "image-2" }),
-    ).resolves.toEqual({ listingId: "listing-1", imageId: "image-2" });
-
-    expect(hoisted.deleteListingImage).toHaveBeenCalledWith({
-      listingId: "listing-1",
-      imageId: "image-2",
+  it("enhances descriptions after incrementing the generation count", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.getOwnedListing.mockResolvedValue({
+      id: "listing-1",
       sellerId: "seller-1",
+      status: "draft",
+      startsAt: null,
+      aiDescriptionGenerationCount: 0,
     });
-    expectListingRevalidation("listing-1");
+    hoisted.incrementListingDescriptionGenerationCount.mockResolvedValue({
+      aiDescriptionGenerationCount: 1,
+    });
+    hoisted.streamEnhancedDescription.mockResolvedValue({
+      text: new Array(10)
+        .fill("Friendly rewrite based on the existing description only.")
+        .join(" "),
+      modelId: "demo-model",
+    });
+    const { enhanceListingDescriptionAction } = await loadActions();
+
+    await expect(
+      enhanceListingDescriptionAction({
+        listingId: "listing-1",
+        title: "Camera",
+        category: "electronics",
+        condition: "good",
+        description: "Camera body with strap and case.",
+        tone: "friendly",
+      }),
+    ).resolves.toEqual({
+      text: new Array(10)
+        .fill("Friendly rewrite based on the existing description only.")
+        .join(" "),
+      remainingRuns: 9,
+    });
   });
 });

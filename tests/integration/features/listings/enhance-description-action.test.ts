@@ -4,13 +4,13 @@ import { listing, user } from "@/db/schema";
 import { createTestDatabase } from "../../../helpers/database";
 
 const hoisted = vi.hoisted(() => ({
-  getSession: vi.fn(),
+  requireAuthenticatedSession: vi.fn(),
   db: null as Awaited<ReturnType<typeof createTestDatabase>>["db"] | null,
   streamEnhancedDescription: vi.fn(),
 }));
 
 vi.mock("@/features/auth/session", () => ({
-  getSession: hoisted.getSession,
+  requireAuthenticatedSession: hoisted.requireAuthenticatedSession,
 }));
 
 vi.mock("@/db/client", () => ({
@@ -37,7 +37,7 @@ describe("enhanceListingDescriptionAction", () => {
   it("returns a validated enhanced description and consumes one run", async () => {
     const testDatabase = await createTestDatabase();
     hoisted.db = testDatabase.db;
-    hoisted.getSession.mockResolvedValue({
+    hoisted.requireAuthenticatedSession.mockResolvedValue({
       user: { id: "seller-1" },
       session: { id: "session-1" },
     });
@@ -108,7 +108,7 @@ describe("enhanceListingDescriptionAction", () => {
   it("rejects requests after the per-listing AI limit is reached", async () => {
     const testDatabase = await createTestDatabase();
     hoisted.db = testDatabase.db;
-    hoisted.getSession.mockResolvedValue({
+    hoisted.requireAuthenticatedSession.mockResolvedValue({
       user: { id: "seller-1" },
       session: { id: "session-1" },
     });

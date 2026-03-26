@@ -10,8 +10,7 @@ import { useCreateListingUpload } from "@/features/listings/hooks/use-create-lis
 
 const hoisted = vi.hoisted(() => ({
   createDraftFromFirstUploadAction: vi.fn(),
-  requestListingImageUploadSignature: vi.fn(),
-  uploadListingImageToCloudinary: vi.fn(),
+  uploadImage: vi.fn(),
 }));
 
 const push = vi.fn();
@@ -34,10 +33,10 @@ vi.mock("@/features/listings/actions", () => ({
   createDraftFromFirstUploadAction: hoisted.createDraftFromFirstUploadAction,
 }));
 
-vi.mock("@/features/listings/upload", () => ({
-  requestListingImageUploadSignature:
-    hoisted.requestListingImageUploadSignature,
-  uploadListingImageToCloudinary: hoisted.uploadListingImageToCloudinary,
+vi.mock("@/features/listings/hooks/use-listing-image-upload", () => ({
+  useListingImageUpload: () => ({
+    uploadImage: hoisted.uploadImage,
+  }),
 }));
 
 function HookHarness() {
@@ -76,8 +75,7 @@ describe("useCreateListingUpload", () => {
     push.mockReset();
     refresh.mockReset();
     hoisted.createDraftFromFirstUploadAction.mockReset();
-    hoisted.requestListingImageUploadSignature.mockReset();
-    hoisted.uploadListingImageToCloudinary.mockReset();
+    hoisted.uploadImage.mockReset();
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -97,13 +95,12 @@ describe("useCreateListingUpload", () => {
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     });
 
-    expect(hoisted.requestListingImageUploadSignature).not.toHaveBeenCalled();
-    expect(hoisted.uploadListingImageToCloudinary).not.toHaveBeenCalled();
+    expect(hoisted.uploadImage).not.toHaveBeenCalled();
     expect(hoisted.createDraftFromFirstUploadAction).not.toHaveBeenCalled();
   });
 
   it("returns to preview state and shows an error when upload preparation fails", async () => {
-    hoisted.requestListingImageUploadSignature.mockRejectedValue(
+    hoisted.uploadImage.mockRejectedValue(
       new Error("Unable to prepare the image upload."),
     );
 
@@ -129,14 +126,7 @@ describe("useCreateListingUpload", () => {
   });
 
   it("reuses the uploaded image for the manual fallback path after AI failure", async () => {
-    hoisted.requestListingImageUploadSignature.mockResolvedValue({
-      cloudName: "demo-cloud",
-      apiKey: "demo-key",
-      folder: "augeo/listings",
-      timestamp: 1763611200,
-      signature: "signed-payload",
-    });
-    hoisted.uploadListingImageToCloudinary.mockResolvedValue({
+    hoisted.uploadImage.mockResolvedValue({
       public_id: "cloudinary-public-id",
       secure_url: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
     });
@@ -168,8 +158,7 @@ describe("useCreateListingUpload", () => {
       );
     });
 
-    expect(hoisted.requestListingImageUploadSignature).toHaveBeenCalledTimes(1);
-    expect(hoisted.uploadListingImageToCloudinary).toHaveBeenCalledTimes(1);
+    expect(hoisted.uploadImage).toHaveBeenCalledTimes(1);
     expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenNthCalledWith(
       1,
       {

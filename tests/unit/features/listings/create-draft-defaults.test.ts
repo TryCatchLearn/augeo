@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildManualDraftDefaults,
   buildSmartListingDraftDefaults,
-} from "@/features/listings/mutations";
+} from "@/features/listings/domain";
 
 describe("draft creation defaults", () => {
   it("builds the locked manual fallback payload", () => {

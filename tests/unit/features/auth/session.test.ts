@@ -50,4 +50,14 @@ describe("session helpers", () => {
 
     expect(mockRedirect).toHaveBeenCalledWith("/login?next=%2Fsell");
   });
+
+  it("throws for unauthenticated server actions", async () => {
+    mockGetSession.mockResolvedValue(null);
+
+    const { requireAuthenticatedSession } = await import(
+      "@/features/auth/session"
+    );
+
+    await expect(requireAuthenticatedSession()).rejects.toThrow("Unauthorized");
+  });
 });

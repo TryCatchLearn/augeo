@@ -4,6 +4,7 @@ import { ListingImageUploadPanel } from "@/features/listings/components/listing-
 
 const hoisted = vi.hoisted(() => ({
   addListingImageAction: vi.fn(),
+  uploadImage: vi.fn(),
 }));
 
 const refresh = vi.fn();
@@ -24,64 +25,24 @@ vi.mock("@/features/listings/actions", () => ({
   addListingImageAction: hoisted.addListingImageAction,
 }));
 
-class MockXMLHttpRequest {
-  static response = {
-    public_id: "cloudinary-public-id",
-    secure_url: "https://res.cloudinary.com/demo/image/upload/detail.jpg",
-  };
-
-  static status = 200;
-
-  responseType = "";
-  response = MockXMLHttpRequest.response;
-  status = MockXMLHttpRequest.status;
-  upload = {
-    addEventListener: vi.fn((event: string, callback: EventListener) => {
-      if (event === "progress") {
-        callback({
-          lengthComputable: true,
-          loaded: 50,
-          total: 100,
-        } as unknown as Event);
-      }
-    }),
-  };
-
-  private listeners = new Map<string, EventListener>();
-
-  open() {}
-
-  addEventListener(event: string, callback: EventListener) {
-    this.listeners.set(event, callback);
-  }
-
-  send() {
-    this.listeners.get("load")?.({} as Event);
-  }
-}
+vi.mock("@/features/listings/hooks/use-listing-image-upload", () => ({
+  useListingImageUpload: () => ({
+    uploadImage: hoisted.uploadImage,
+  }),
+}));
 
 describe("ListingImageUploadPanel", () => {
   beforeEach(() => {
     refresh.mockReset();
     hoisted.addListingImageAction.mockReset();
-    vi.stubGlobal("fetch", vi.fn());
-    vi.stubGlobal(
-      "XMLHttpRequest",
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest,
-    );
+    hoisted.uploadImage.mockReset();
   });
 
   it("uploads an additional image and refreshes the listing detail page", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cloudName: "demo-cloud",
-        apiKey: "demo-key",
-        folder: "augeo/listings",
-        timestamp: 1763611200,
-        signature: "signed-payload",
-      }),
-    } as Response);
+    hoisted.uploadImage.mockResolvedValue({
+      public_id: "cloudinary-public-id",
+      secure_url: "https://res.cloudinary.com/demo/image/upload/detail.jpg",
+    });
     hoisted.addListingImageAction.mockResolvedValue({
       listingId: "listing-1",
       imageId: "image-2",
@@ -118,14 +79,14 @@ describe("ListingImageUploadPanel", () => {
     expect(
       await screen.findByText("Listings can include up to 5 images."),
     ).toBeInTheDocument();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(hoisted.uploadImage).not.toHaveBeenCalled();
     expect(hoisted.addListingImageAction).not.toHaveBeenCalled();
   });
 
   it("supports drag-and-drop uploads and shows upload errors", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-    } as Response);
+    hoisted.uploadImage.mockRejectedValue(
+      new Error("Unable to prepare the image upload."),
+    );
 
     render(<ListingImageUploadPanel listingId="listing-1" imageCount={2} />);
     const dropZone = screen.getByText("Drop an image here").closest("label");

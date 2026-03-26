@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeSmartListingCategory,
+  normalizeSuggestedStartingPriceCents,
+  validateSmartListingCondition,
+} from "@/features/listings/domain";
+import {
   descriptionEnhancerRequestSchema,
-  dollarsToCents,
   getRemainingDescriptionEnhancementRuns,
   hasDescriptionEnhancementRunsRemaining,
   listingDraftFormSchema,
-  normalizeSmartListingCategory,
-  normalizeSuggestedStartingPriceCents,
   saveDraftListingSchema,
   validateEnhancedDescription,
   validateEnhancedDescriptionWordCount,
-  validateSmartListingCondition,
 } from "@/features/listings/schema";
+import { dollarsToCents } from "@/features/listings/utils";
 
 describe("listing draft schemas", () => {
   it("validates a complete draft edit payload", () => {

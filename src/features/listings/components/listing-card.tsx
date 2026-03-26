@@ -3,11 +3,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
+import type { ListingCardData } from "@/features/listings/queries";
 import {
   formatListingPrice,
   formatTimeRemaining,
-} from "@/features/listings/domain";
-import type { ListingCardData } from "@/features/listings/queries";
+} from "@/features/listings/utils";
 
 type ListingCardProps = {
   listing: ListingCardData;

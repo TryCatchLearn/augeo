@@ -3,10 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createDraftFromFirstUploadAction } from "@/features/listings/actions";
-import {
-  requestListingImageUploadSignature,
-  uploadListingImageToCloudinary,
-} from "@/features/listings/upload";
+import { useListingImageUpload } from "@/features/listings/hooks/use-listing-image-upload";
 
 type UploadState = "idle" | "preview" | "uploading" | "processing";
 type UploadedImage = {
@@ -17,6 +14,7 @@ type CreationMode = "ai" | "manual";
 
 export function useCreateListingUpload() {
   const router = useRouter();
+  const { uploadImage } = useListingImageUpload();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -69,16 +67,9 @@ export function useCreateListingUpload() {
         setProgress(1);
         setUploadState("uploading");
 
-        const signedParams = await requestListingImageUploadSignature();
-        const uploadResult = await uploadListingImageToCloudinary(
-          file,
-          signedParams,
-          (percent) => {
-            setProgress((currentProgress) =>
-              Math.max(currentProgress, percent),
-            );
-          },
-        );
+        const uploadResult = await uploadImage(file, (percent) => {
+          setProgress((currentProgress) => Math.max(currentProgress, percent));
+        });
 
         nextUploadedImage = {
           publicId: uploadResult.public_id,

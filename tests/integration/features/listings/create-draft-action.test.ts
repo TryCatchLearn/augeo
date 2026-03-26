@@ -4,13 +4,13 @@ import { listing, listingImage, user } from "@/db/schema";
 import { createTestDatabase } from "../../../helpers/database";
 
 const hoisted = vi.hoisted(() => ({
-  getSession: vi.fn(),
+  requireAuthenticatedSession: vi.fn(),
   db: null as Awaited<ReturnType<typeof createTestDatabase>>["db"] | null,
   generateSmartListingFromImage: vi.fn(),
 }));
 
 vi.mock("@/features/auth/session", () => ({
-  getSession: hoisted.getSession,
+  requireAuthenticatedSession: hoisted.requireAuthenticatedSession,
 }));
 
 vi.mock("@/db/client", () => ({
@@ -39,7 +39,7 @@ describe("createDraftFromFirstUploadAction", () => {
       condition: "good",
       suggestedStartingPriceCents: 18500,
     });
-    hoisted.getSession.mockResolvedValue({
+    hoisted.requireAuthenticatedSession.mockResolvedValue({
       user: { id: "seller-1" },
     });
 
@@ -98,7 +98,7 @@ describe("createDraftFromFirstUploadAction", () => {
   it("returns a recoverable AI failure without creating a draft", async () => {
     const testDatabase = await createTestDatabase();
     hoisted.db = testDatabase.db;
-    hoisted.getSession.mockResolvedValue({
+    hoisted.requireAuthenticatedSession.mockResolvedValue({
       user: { id: "seller-1" },
     });
 

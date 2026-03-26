@@ -9,10 +9,7 @@ import {
   canAddListingImage,
   maxListingImageCount,
 } from "@/features/listings/domain";
-import {
-  requestListingImageUploadSignature,
-  uploadListingImageToCloudinary,
-} from "@/features/listings/upload";
+import { useListingImageUpload } from "@/features/listings/hooks/use-listing-image-upload";
 import { cn } from "@/lib/utils";
 
 type ListingImageUploadPanelProps = {
@@ -27,6 +24,7 @@ export function ListingImageUploadPanel({
   imageCount,
 }: ListingImageUploadPanelProps) {
   const router = useRouter();
+  const { uploadImage } = useListingImageUpload();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -52,14 +50,9 @@ export function ListingImageUploadPanel({
       setProgress(1);
       setUploadState("uploading");
 
-      const signedParams = await requestListingImageUploadSignature();
-      const uploadResult = await uploadListingImageToCloudinary(
-        file,
-        signedParams,
-        (percent) => {
-          setProgress((currentProgress) => Math.max(currentProgress, percent));
-        },
-      );
+      const uploadResult = await uploadImage(file, (percent) => {
+        setProgress((currentProgress) => Math.max(currentProgress, percent));
+      });
 
       setProgress(100);
       setUploadState("processing");

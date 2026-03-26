@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildManualDraftDefaults,
+  buildSmartListingDraftDefaults,
   canAddListingImage,
   canDeleteListing,
   canDeleteListingImage,
@@ -7,15 +9,20 @@ import {
   canReceiveBids,
   canReturnToDraft,
   canViewListingDetail,
-  formatTimeRemaining,
-  getListingTimeMeta,
   getNextMainImageIdAfterDelete,
   getPlaceholderPricing,
   getPublishedStatus,
   isListingStatus,
   listingConditions,
   listingStatuses,
+  normalizeSmartListingCategory,
+  normalizeSuggestedStartingPriceCents,
+  validateSmartListingCondition,
 } from "@/features/listings/domain";
+import {
+  formatTimeRemaining,
+  getListingTimeMeta,
+} from "@/features/listings/utils";
 
 describe("listing status rules", () => {
   it("exports the supported listing enums", () => {
@@ -181,6 +188,48 @@ describe("listing status rules", () => {
     ).toEqual({
       label: "Auction Ended",
       value: "Ended",
+    });
+  });
+
+  it("normalizes smart listing AI output", () => {
+    expect(normalizeSmartListingCategory("Home & Garden")).toBe("home_garden");
+    expect(normalizeSmartListingCategory("Automotive")).toBe("vehicles");
+    expect(normalizeSmartListingCategory("unknown bucket")).toBe("other");
+    expect(validateSmartListingCondition("Like New")).toBe("like_new");
+    expect(validateSmartListingCondition("mystery")).toBeNull();
+    expect(normalizeSuggestedStartingPriceCents(1299.8)).toBe(1300);
+    expect(normalizeSuggestedStartingPriceCents(0)).toBeNull();
+  });
+
+  it("builds manual and smart listing draft defaults", () => {
+    const now = new Date("2026-03-21T12:00:00.000Z");
+
+    expect(buildManualDraftDefaults(now)).toMatchObject({
+      title: "Untitled draft",
+      location: "Add location",
+      category: "other",
+      condition: "good",
+      startingBidCents: 100,
+      status: "draft",
+    });
+    expect(
+      buildSmartListingDraftDefaults(
+        {
+          title: " Camera Lot ",
+          description: " Nice body and case ",
+          category: "electronics",
+          condition: "good",
+          suggestedStartingPriceCents: 18500,
+        },
+        now,
+      ),
+    ).toMatchObject({
+      title: "Camera Lot",
+      description: "Nice body and case",
+      category: "electronics",
+      condition: "good",
+      startingBidCents: 18500,
+      status: "draft",
     });
   });
 });

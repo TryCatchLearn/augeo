@@ -4,6 +4,7 @@ import { CreateListingUpload } from "@/features/listings/components/create-listi
 
 const hoisted = vi.hoisted(() => ({
   createDraftFromFirstUploadAction: vi.fn(),
+  uploadImage: vi.fn(),
 }));
 
 const push = vi.fn();
@@ -26,57 +27,18 @@ vi.mock("@/features/listings/actions", () => ({
   createDraftFromFirstUploadAction: hoisted.createDraftFromFirstUploadAction,
 }));
 
-class MockXMLHttpRequest {
-  static response = {
-    public_id: "cloudinary-public-id",
-    secure_url: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
-  };
-
-  static status = 200;
-
-  method = "";
-  url = "";
-  responseType = "";
-  response = MockXMLHttpRequest.response;
-  status = MockXMLHttpRequest.status;
-  upload = {
-    addEventListener: vi.fn((event: string, callback: EventListener) => {
-      if (event === "progress") {
-        callback({
-          lengthComputable: true,
-          loaded: 50,
-          total: 100,
-        } as unknown as Event);
-      }
-    }),
-  };
-
-  private listeners = new Map<string, EventListener>();
-
-  open(method: string, url: string) {
-    this.method = method;
-    this.url = url;
-  }
-
-  addEventListener(event: string, callback: EventListener) {
-    this.listeners.set(event, callback);
-  }
-
-  send() {
-    this.listeners.get("load")?.({} as Event);
-  }
-}
+vi.mock("@/features/listings/hooks/use-listing-image-upload", () => ({
+  useListingImageUpload: () => ({
+    uploadImage: hoisted.uploadImage,
+  }),
+}));
 
 describe("CreateListingUpload", () => {
   beforeEach(() => {
     push.mockReset();
     refresh.mockReset();
     hoisted.createDraftFromFirstUploadAction.mockReset();
-    vi.stubGlobal("fetch", vi.fn());
-    vi.stubGlobal(
-      "XMLHttpRequest",
-      MockXMLHttpRequest as unknown as typeof XMLHttpRequest,
-    );
+    hoisted.uploadImage.mockReset();
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -116,16 +78,10 @@ describe("CreateListingUpload", () => {
   });
 
   it("uploads the first image, creates a draft, and redirects to the detail page", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cloudName: "demo-cloud",
-        apiKey: "demo-key",
-        folder: "augeo/listings",
-        timestamp: 1763611200,
-        signature: "signed-payload",
-      }),
-    } as Response);
+    hoisted.uploadImage.mockResolvedValue({
+      public_id: "cloudinary-public-id",
+      secure_url: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+    });
     hoisted.createDraftFromFirstUploadAction.mockResolvedValue({
       status: "created",
       listingId: "listing-123",
@@ -153,10 +109,6 @@ describe("CreateListingUpload", () => {
     });
 
     expect(refresh).toHaveBeenCalled();
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/upload-signature",
-      expect.objectContaining({ method: "POST" }),
-    );
     expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenCalledWith({
       uploadPublicId: "cloudinary-public-id",
       uploadUrl: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
@@ -165,16 +117,10 @@ describe("CreateListingUpload", () => {
   });
 
   it("offers retry and manual fallback after AI draft creation fails", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cloudName: "demo-cloud",
-        apiKey: "demo-key",
-        folder: "augeo/listings",
-        timestamp: 1763611200,
-        signature: "signed-payload",
-      }),
-    } as Response);
+    hoisted.uploadImage.mockResolvedValue({
+      public_id: "cloudinary-public-id",
+      secure_url: "https://res.cloudinary.com/demo/image/upload/cover.jpg",
+    });
     hoisted.createDraftFromFirstUploadAction
       .mockResolvedValueOnce({
         status: "ai_failed",
@@ -224,7 +170,7 @@ describe("CreateListingUpload", () => {
       expect(push).toHaveBeenCalledWith("/listings/listing-456");
     });
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(hoisted.uploadImage).toHaveBeenCalledTimes(1);
     expect(hoisted.createDraftFromFirstUploadAction).toHaveBeenNthCalledWith(
       1,
       {
@@ -244,9 +190,9 @@ describe("CreateListingUpload", () => {
   });
 
   it("supports drag-and-drop selection and shows upload errors", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-    } as Response);
+    hoisted.uploadImage.mockRejectedValue(
+      new Error("Unable to prepare the image upload."),
+    );
 
     render(<CreateListingUpload />);
     const dropZone = screen

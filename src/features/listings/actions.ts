@@ -1,22 +1,36 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
-import { listing } from "@/db/schema";
-import { getSession } from "@/features/auth/session";
+import { requireAuthenticatedSession } from "@/features/auth/session";
 import {
-  addListingImage,
-  createDraftFromFirstUpload,
-  deleteDraftListing,
-  deleteListingImage,
-  publishListing,
-  returnListingToDraft,
-  saveDraftListing,
+  buildManualDraftDefaults,
+  buildSmartListingDraftDefaults,
+  canAddListingImage,
+  canDeleteListing,
+  canDeleteListingImage,
+  canPublishListing,
+  canReturnToDraft,
+  getNextMainImageIdAfterDelete,
+  getPublishedStatus,
+  InvalidSmartListingResultError,
+} from "@/features/listings/domain";
+import {
+  deleteDraftListingRecords,
+  deleteListingImageRecord,
+  incrementListingDescriptionGenerationCount,
+  insertDraftWithMainImage,
+  insertListingImage,
   setMainListingImage,
+  updateDraftListing,
+  updateListingStatus,
 } from "@/features/listings/mutations";
 import {
+  getOwnedListing,
+  listListingImageAssets,
+} from "@/features/listings/queries";
+import {
   addListingImageSchema,
+  createDraftFromFirstUploadSchema,
   descriptionEnhancerRequestSchema,
   getRemainingDescriptionEnhancementRuns,
   hasDescriptionEnhancementRunsRemaining,
@@ -25,47 +39,32 @@ import {
   saveDraftListingSchema,
   validateEnhancedDescription,
 } from "@/features/listings/schema";
-import { streamEnhancedDescription } from "@/server/ai";
+import {
+  AiGenerationError,
+  generateSmartListingFromImage,
+  streamEnhancedDescription,
+} from "@/server/ai";
+import {
+  createListingImageUploadSignature,
+  deleteCloudinaryAssets,
+} from "@/server/cloudinary";
 
-const createDraftSchema = z.object({
-  uploadPublicId: z.string().min(1),
-  uploadUrl: z.url(),
-  creationMode: z.enum(["ai", "manual"]),
-});
-
-export async function createDraftFromFirstUploadAction(input: {
-  uploadPublicId: string;
-  uploadUrl: string;
-  creationMode: "ai" | "manual";
-}) {
-  const session = await getSession();
-
-  if (!session) {
-    throw new Error("Unauthorized");
-  }
-
-  const parsedInput = createDraftSchema.safeParse(input);
+function parseOrThrow<TOutput>(
+  parser: {
+    safeParse: (
+      value: unknown,
+    ) => { success: true; data: TOutput } | { success: false };
+  },
+  input: unknown,
+  message: string,
+) {
+  const parsedInput = parser.safeParse(input);
 
   if (!parsedInput.success) {
-    throw new Error("Invalid draft payload");
+    throw new Error(message);
   }
 
-  const draft = await createDraftFromFirstUpload({
-    sellerId: session.user.id,
-    ...parsedInput.data,
-  });
-
-  if (draft.status === "ai_failed") {
-    return {
-      status: "ai_failed" as const,
-      errorMessage: draft.message,
-    };
-  }
-
-  return {
-    status: "created" as const,
-    listingId: draft.id,
-  };
+  return parsedInput.data;
 }
 
 function revalidateListingPaths(listingId: string) {
@@ -75,23 +74,73 @@ function revalidateListingPaths(listingId: string) {
   revalidatePath("/dashboard/listings");
 }
 
+export async function createListingImageUploadSignatureAction() {
+  await requireAuthenticatedSession();
+
+  return createListingImageUploadSignature();
+}
+
+export async function createDraftFromFirstUploadAction(input: unknown) {
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    createDraftFromFirstUploadSchema,
+    input,
+    "Invalid draft payload",
+  );
+  const now = new Date();
+
+  try {
+    const defaults =
+      parsedInput.creationMode === "manual"
+        ? buildManualDraftDefaults(now)
+        : buildSmartListingDraftDefaults(
+            await generateSmartListingFromImage(parsedInput.uploadUrl),
+            now,
+          );
+    const draft = await insertDraftWithMainImage({
+      sellerId: session.user.id,
+      uploadPublicId: parsedInput.uploadPublicId,
+      uploadUrl: parsedInput.uploadUrl,
+      defaults,
+    });
+
+    return {
+      status: "created" as const,
+      listingId: draft.id,
+    };
+  } catch (error) {
+    if (
+      error instanceof AiGenerationError ||
+      error instanceof InvalidSmartListingResultError
+    ) {
+      return {
+        status: "ai_failed" as const,
+        errorMessage:
+          "We couldn't create an AI draft right now. Retry AI or continue without AI.",
+      };
+    }
+
+    throw error;
+  }
+}
+
 export async function saveDraftListingAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    saveDraftListingSchema,
+    input,
+    "Invalid draft payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing cannot be edited.");
   }
 
-  const parsedInput = saveDraftListingSchema.safeParse(input);
-
-  if (!parsedInput.success) {
-    throw new Error("Invalid draft payload");
-  }
-
-  const result = await saveDraftListing({
-    sellerId: session.user.id,
-    ...parsedInput.data,
-  });
+  const result = await updateDraftListing(parsedInput);
 
   revalidateListingPaths(result.id);
 
@@ -99,21 +148,24 @@ export async function saveDraftListingAction(input: unknown) {
 }
 
 export async function publishListingAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    listingIdActionSchema,
+    input,
+    "Invalid publish payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || !canPublishListing(existingListing.status)) {
+    throw new Error("Listing cannot be published.");
   }
 
-  const parsedInput = listingIdActionSchema.safeParse(input);
-
-  if (!parsedInput.success) {
-    throw new Error("Invalid publish payload");
-  }
-
-  const result = await publishListing({
-    listingId: parsedInput.data.listingId,
-    sellerId: session.user.id,
+  const result = await updateListingStatus({
+    listingId: parsedInput.listingId,
+    status: getPublishedStatus(existingListing.startsAt),
   });
 
   revalidateListingPaths(result.id);
@@ -122,21 +174,24 @@ export async function publishListingAction(input: unknown) {
 }
 
 export async function returnListingToDraftAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    listingIdActionSchema,
+    input,
+    "Invalid return-to-draft payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || !canReturnToDraft(existingListing.status, 0)) {
+    throw new Error("Listing cannot be returned to draft.");
   }
 
-  const parsedInput = listingIdActionSchema.safeParse(input);
-
-  if (!parsedInput.success) {
-    throw new Error("Invalid return-to-draft payload");
-  }
-
-  const result = await returnListingToDraft({
-    listingId: parsedInput.data.listingId,
-    sellerId: session.user.id,
+  const result = await updateListingStatus({
+    listingId: parsedInput.listingId,
+    status: "draft",
   });
 
   revalidateListingPaths(result.id);
@@ -145,22 +200,26 @@ export async function returnListingToDraftAction(input: unknown) {
 }
 
 export async function deleteDraftListingAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    listingIdActionSchema,
+    input,
+    "Invalid delete payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || !canDeleteListing(existingListing.status)) {
+    throw new Error("Listing cannot be deleted.");
   }
 
-  const parsedInput = listingIdActionSchema.safeParse(input);
+  const images = await listListingImageAssets(parsedInput.listingId);
 
-  if (!parsedInput.success) {
-    throw new Error("Invalid delete payload");
-  }
+  await deleteCloudinaryAssets(images.map((image) => image.publicId));
 
-  const result = await deleteDraftListing({
-    listingId: parsedInput.data.listingId,
-    sellerId: session.user.id,
-  });
+  const result = await deleteDraftListingRecords(parsedInput.listingId);
 
   revalidateListingPaths(result.id);
 
@@ -168,23 +227,32 @@ export async function deleteDraftListingAction(input: unknown) {
 }
 
 export async function addListingImageAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    addListingImageSchema,
+    input,
+    "Invalid add-image payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing image cannot be added.");
   }
 
-  const parsedInput = addListingImageSchema.safeParse(input);
+  const images = await listListingImageAssets(parsedInput.listingId);
 
-  if (!parsedInput.success) {
-    throw new Error("Invalid add-image payload");
+  if (!canAddListingImage(images.length)) {
+    throw new Error("Listings can include up to 5 images.");
   }
 
-  const result = await addListingImage({
-    listingId: parsedInput.data.listingId,
-    sellerId: session.user.id,
-    uploadPublicId: parsedInput.data.uploadPublicId,
-    uploadUrl: parsedInput.data.uploadUrl,
+  const result = await insertListingImage({
+    listingId: parsedInput.listingId,
+    uploadPublicId: parsedInput.uploadPublicId,
+    uploadUrl: parsedInput.uploadUrl,
+    isMain: images.length === 0,
   });
 
   revalidateListingPaths(result.listingId);
@@ -193,22 +261,30 @@ export async function addListingImageAction(input: unknown) {
 }
 
 export async function setMainListingImageAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    listingImageActionSchema,
+    input,
+    "Invalid set-main payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing main image cannot be updated.");
   }
 
-  const parsedInput = listingImageActionSchema.safeParse(input);
+  const images = await listListingImageAssets(parsedInput.listingId);
 
-  if (!parsedInput.success) {
-    throw new Error("Invalid set-main payload");
+  if (!images.some((image) => image.id === parsedInput.imageId)) {
+    throw new Error("Listing image was not found.");
   }
 
   const result = await setMainListingImage({
-    listingId: parsedInput.data.listingId,
-    imageId: parsedInput.data.imageId,
-    sellerId: session.user.id,
+    listingId: parsedInput.listingId,
+    imageId: parsedInput.imageId,
   });
 
   revalidateListingPaths(result.listingId);
@@ -217,95 +293,82 @@ export async function setMainListingImageAction(input: unknown) {
 }
 
 export async function deleteListingImageAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    listingImageActionSchema,
+    input,
+    "Invalid delete-image payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing image cannot be deleted.");
   }
 
-  const parsedInput = listingImageActionSchema.safeParse(input);
+  const images = await listListingImageAssets(parsedInput.listingId);
+  const targetImage = images.find((image) => image.id === parsedInput.imageId);
 
-  if (!parsedInput.success) {
-    throw new Error("Invalid delete-image payload");
+  if (!targetImage) {
+    throw new Error("Listing image was not found.");
   }
 
-  const result = await deleteListingImage({
-    listingId: parsedInput.data.listingId,
-    imageId: parsedInput.data.imageId,
-    sellerId: session.user.id,
+  if (!canDeleteListingImage(images.length)) {
+    throw new Error("The final listing image cannot be deleted.");
+  }
+
+  await deleteCloudinaryAssets([targetImage.publicId]);
+
+  const result = await deleteListingImageRecord({
+    imageId: parsedInput.imageId,
+    nextMainImageId: targetImage.isMain
+      ? getNextMainImageIdAfterDelete(images, parsedInput.imageId)
+      : null,
   });
 
-  revalidateListingPaths(result.listingId);
+  revalidateListingPaths(parsedInput.listingId);
 
-  return { listingId: result.listingId, imageId: result.id };
+  return { listingId: parsedInput.listingId, imageId: result.id };
 }
 
 export async function enhanceListingDescriptionAction(input: unknown) {
-  const session = await getSession();
+  const session = await requireAuthenticatedSession();
+  const parsedInput = parseOrThrow(
+    descriptionEnhancerRequestSchema,
+    input,
+    "Invalid description-enhancement payload",
+  );
+  const existingListing = await getOwnedListing(
+    session.user.id,
+    parsedInput.listingId,
+  );
 
-  if (!session) {
-    throw new Error("Unauthorized");
+  if (!existingListing || existingListing.status !== "draft") {
+    throw new Error("Listing cannot be enhanced.");
   }
 
-  const parsedInput = descriptionEnhancerRequestSchema.safeParse(input);
-
-  if (!parsedInput.success) {
-    throw new Error("Invalid description-enhancement payload");
+  if (
+    !hasDescriptionEnhancementRunsRemaining(
+      existingListing.aiDescriptionGenerationCount,
+    )
+  ) {
+    throw new Error("AI description limit reached for this listing.");
   }
 
-  const { db } = await import("@/db/client");
-  const enhancementRequest = await db.transaction(async (tx) => {
-    const [existingListing] = await tx
-      .select({
-        id: listing.id,
-        sellerId: listing.sellerId,
-        status: listing.status,
-        aiDescriptionGenerationCount: listing.aiDescriptionGenerationCount,
-      })
-      .from(listing)
-      .where(eq(listing.id, parsedInput.data.listingId));
+  const nextCount = existingListing.aiDescriptionGenerationCount + 1;
 
-    if (
-      !existingListing ||
-      existingListing.sellerId !== session.user.id ||
-      existingListing.status !== "draft"
-    ) {
-      throw new Error("Listing cannot be enhanced.");
-    }
-
-    if (
-      !hasDescriptionEnhancementRunsRemaining(
-        existingListing.aiDescriptionGenerationCount,
-      )
-    ) {
-      throw new Error("AI description limit reached for this listing.");
-    }
-
-    const nextGenerationCount =
-      existingListing.aiDescriptionGenerationCount + 1;
-
-    await tx
-      .update(listing)
-      .set({
-        aiDescriptionGenerationCount: nextGenerationCount,
-      })
-      .where(
-        and(
-          eq(listing.id, parsedInput.data.listingId),
-          eq(listing.sellerId, existingListing.sellerId),
-        ),
-      );
-
-    return {
-      remainingRuns:
-        getRemainingDescriptionEnhancementRuns(nextGenerationCount),
-    };
+  await incrementListingDescriptionGenerationCount({
+    listingId: parsedInput.listingId,
+    sellerId: session.user.id,
+    currentCount: existingListing.aiDescriptionGenerationCount,
   });
 
-  const result = await streamEnhancedDescription(parsedInput.data);
+  const result = await streamEnhancedDescription(parsedInput);
   const validation = validateEnhancedDescription(
     result.text,
-    parsedInput.data.description,
+    parsedInput.description,
   );
 
   if (!validation.success) {
@@ -314,6 +377,6 @@ export async function enhanceListingDescriptionAction(input: unknown) {
 
   return {
     text: validation.description,
-    remainingRuns: enhancementRequest.remainingRuns,
+    remainingRuns: getRemainingDescriptionEnhancementRuns(nextCount),
   };
 }

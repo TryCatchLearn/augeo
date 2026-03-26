@@ -1,47 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  requestListingImageUploadSignature,
-  uploadListingImageToCloudinary,
-} from "@/features/listings/upload";
+import { uploadListingImageToCloudinary } from "@/features/listings/hooks/use-listing-image-upload";
+
+vi.mock("@/features/listings/actions", () => ({
+  createListingImageUploadSignatureAction: vi.fn(),
+}));
 
 describe("listing upload helpers", () => {
-  it("rejects when the signature endpoint returns a non-ok response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-      } as Response),
-    );
-
-    await expect(requestListingImageUploadSignature()).rejects.toThrow(
-      "Unable to prepare the image upload.",
-    );
-  });
-
-  it("returns the parsed signature payload when the request succeeds", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          cloudName: "demo-cloud",
-          apiKey: "demo-key",
-          folder: "augeo/listings",
-          timestamp: 1763611200,
-          signature: "signed-payload",
-        }),
-      } as Response),
-    );
-
-    await expect(requestListingImageUploadSignature()).resolves.toEqual({
-      cloudName: "demo-cloud",
-      apiKey: "demo-key",
-      folder: "augeo/listings",
-      timestamp: 1763611200,
-      signature: "signed-payload",
-    });
-  });
-
   it("ignores non-computable progress events and resolves successful uploads", async () => {
     class SuccessXMLHttpRequest {
       responseType = "";

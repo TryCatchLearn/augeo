@@ -319,7 +319,7 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - Draft listing detail pages are owner-only and return not found for non-owners.
 - Phase 1 does not add the `bid` table; public listing cards and detail metadata show `startingBid` and `0 bids`.
 - Listing images use signed Cloudinary browser uploads plus persisted DB metadata and seller-owned deletion.
-- The first uploaded image creates a publish-ready draft using deterministic fake defaults that Phase 2 can later replace with AI output.
+- The first uploaded image creates a draft using AI-derived listing suggestions when available, with a manual fallback that preserves seller control.
 - `/sell` uses a strict two-panel no-overflow desktop/tablet layout and stacks on narrow screens.
 - Listings are capped at `5` total images, and the last remaining image cannot be deleted.
 
@@ -352,6 +352,8 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 ## Phase 2 - AI Features
 
 Objective: add AI-assisted seller tooling while keeping the seller fully in control of the final listing.
+
+Status: Approved on 2026-03-27. Implementation completed; acceptance still pending the 80% coverage gate.
 
 ### Scope
 
@@ -411,6 +413,7 @@ Objective: add AI-assisted seller tooling while keeping the seller fully in cont
 - [x] AI fallback/error handling implemented
 - [x] Unit tests completed
 - [x] Integration tests completed
+- [x] Implementation verification run (`npm run test:run`, `npm run lint`, `npm run build`, `npx tsc --noEmit`)
 - [ ] 80%+ coverage met
 - [ ] Phase accepted
 
