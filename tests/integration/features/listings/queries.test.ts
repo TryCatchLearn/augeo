@@ -8,6 +8,7 @@ import {
   getListingDetailForViewer,
   listPublicListingCards,
   listSellerListingCards,
+  normalizePublicListingsQuery,
 } from "@/features/listings/queries";
 import {
   createTestDatabase,
@@ -25,7 +26,7 @@ describe("listing queries", () => {
     await testDatabase.cleanup();
   });
 
-  it("returns public listings while excluding drafts", async () => {
+  it("returns public listings for the selected public status and total count", async () => {
     const sellerId = randomUUID();
     const now = new Date("2026-03-21T12:00:00.000Z");
 
@@ -37,6 +38,7 @@ describe("listing queries", () => {
     });
 
     const activeListingId = randomUUID();
+    const scheduledListingId = randomUUID();
     const draftListingId = randomUUID();
 
     await testDatabase.db.insert(listing).values([
@@ -53,6 +55,20 @@ describe("listing queries", () => {
         startsAt: null,
         endsAt: new Date(now.getTime() + 1000 * 60 * 60),
         status: "active",
+      },
+      {
+        id: scheduledListingId,
+        sellerId,
+        title: "Scheduled Vase",
+        description: "Future listing",
+        location: "Seattle, WA",
+        category: "home_garden",
+        condition: "like_new",
+        startingBidCents: 28000,
+        reservePriceCents: null,
+        startsAt: new Date(now.getTime() + 1000 * 60 * 60 * 12),
+        endsAt: new Date(now.getTime() + 1000 * 60 * 60 * 48),
+        status: "scheduled",
       },
       {
         id: draftListingId,
@@ -78,16 +94,35 @@ describe("listing queries", () => {
       isMain: true,
     });
 
-    const listings = await listPublicListingCards(testDatabase.db);
+    const listings = await listPublicListingCards(
+      { status: "active" },
+      testDatabase.db,
+    );
 
-    expect(listings).toHaveLength(1);
-    expect(listings[0]).toMatchObject({
+    expect(listings.totalCount).toBe(1);
+    expect(listings.items).toHaveLength(1);
+    expect(listings.items[0]).toMatchObject({
       id: activeListingId,
       title: "Public Camera",
       status: "active",
       sellerName: "Seller One",
       imageUrl: "https://picsum.photos/seed/public-camera/1200/900",
       bidCount: 0,
+    });
+    expect(listings.items.find((item) => item.id === scheduledListingId)).toBe(
+      undefined,
+    );
+  });
+
+  it("normalizes invalid public status values to active", () => {
+    expect(
+      normalizePublicListingsQuery({
+        status: "not-a-status",
+      }),
+    ).toMatchObject({
+      status: "active",
+      page: 1,
+      pageSize: 6,
     });
   });
 

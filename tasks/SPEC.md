@@ -419,52 +419,50 @@ Status: Approved on 2026-03-27. Implementation completed; acceptance still pendi
 
 ## Phase 3 - Browse and Search Listings
 
-Objective: make active listings discoverable through browsing, search, and filtering.
+Objective: improve public browse discovery and seller listing navigation with richer seed data, explicit navbar search, filter/sort controls, and shared pagination.
 
-### Scope
+Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
-- Replace the placeholder `/listings` page with real listing data.
-- Add search by title and description.
-- Add filtering by category and condition.
-- Add sorting for newest, ending soon, and price.
-- Add public listing details page shell.
+### Sub-Phases
 
-### Search Design
+- `3A` Seed data and status tabs
+- `3B` Filter dropdowns and sort
+- `3C` Search
+- `3D` Pagination
 
-- Preferred implementation: SQLite FTS5 index over listing title and description.
-- Search results should exclude non-public listing states by default.
-- Empty search should fall back to browse behavior.
+### Phase 3 Decisions
 
-### Public Listing Detail Requirements
-
-- Gallery or primary image
-- Title, description, category, condition
-- Current bid or starting bid
-- Start date/time when scheduled
-- End date/time
-- Seller display name
-- Bid count summary
-- Reserved placeholders for live bidding panel introduced in Phase 4
+- `/listings` uses URL-driven server-rendered browse state.
+- Public status tabs are `active`, `scheduled`, and `ended`, with `active` as the default.
+- Navbar search is always visible and submits only on Enter or search-button click.
+- Search uses simple case-insensitive contains matching on listing title and description.
+- Phase 3 price filtering and sorting use `startingBidCents`.
+- `Most Bids` remains visible in the UI/query contract, but temporarily resolves to the same ordering as `Newest` until Phase 4 adds real bid data.
+- `/dashboard/listings` keeps its existing seller status tabs and adopts shared pagination only.
+- Pagination is shared, offset-based, and URL-driven through `page` and `pageSize`.
 
 ### Acceptance Criteria
 
-- Visitors can browse active listings without authentication.
-- Search returns relevant results using listing title/description.
-- Filters and sort order are reflected in the UI and URL query state.
-- Detail pages render using persisted listing data.
+- Visitors can browse `active`, `scheduled`, and `ended` listings without authentication.
+- Search returns title/description matches using the locked simple contains behavior.
+- Public status tabs, filters, sort, and page size are reflected in the `/listings` UI and URL query state.
+- Navbar search is always visible, works from any page, and applies search on `/listings`.
+- Shared pagination works on both `/listings` and `/dashboard/listings` while preserving active query state.
+- Seed data supports realistic UI testing across statuses, categories, conditions, and pagination states.
 
 ### Test Requirements
 
-- Unit tests for query parsing, filter mapping, and search utilities.
-- Integration tests for browse page data rendering, query-driven search/filter behavior, and public listing detail page rendering.
+- Unit tests for query parsing, search normalization, filter/sort mapping, and pagination utilities.
+- Integration tests for public browse query behavior, seller listings pagination, header search behavior, and `/listings` UI state driven by query params.
 
 ### Phase 3 Tracker
 
-- [ ] Detailed phase spec approved
-- [ ] Browse query contract finalized
-- [ ] Search indexing approach finalized
-- [ ] Listings index page implemented
-- [ ] Public listing detail page implemented
+- [x] Detailed phase spec approved
+- [x] `tasks/TODO.md` execution plan finalized
+- [x] Seed data plan finalized
+- [x] Browse query contract finalized
+- [ ] Search/filter/sort contract finalized
+- [ ] Shared pagination contract finalized
 - [ ] Unit tests completed
 - [ ] Integration tests completed
 - [ ] 80%+ coverage met

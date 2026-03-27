@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { listing, listingImage, user } from "@/db/schema";
@@ -56,6 +56,34 @@ export type ListingImageAssetRecord = {
 
 type Database = LibSQLDatabase<typeof schema>;
 
+export const publicListingStatuses = ["active", "scheduled", "ended"] as const;
+export const listingPageSizes = [6, 12, 18, 24] as const;
+
+export type PublicListingStatus = (typeof publicListingStatuses)[number];
+export type ListingPageSize = (typeof listingPageSizes)[number];
+
+export type PublicListingsQueryInput = {
+  status?: string;
+  page?: string;
+  pageSize?: string;
+};
+
+export type PublicListingsQuery = {
+  status: PublicListingStatus;
+  page: number;
+  pageSize: ListingPageSize;
+};
+
+export type PaginatedListingCardResult = {
+  items: ListingCardData[];
+  totalCount: number;
+  page: number;
+  pageSize: ListingPageSize;
+  pageCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
 async function resolveDatabase(database?: Database) {
   if (database) {
     return database;
@@ -77,10 +105,58 @@ const listingCardSelection = {
   imageUrl: listingImage.url,
 };
 
-export async function listPublicListingCards(database?: Database) {
-  const resolvedDatabase = await resolveDatabase(database);
+function normalizePositiveInteger(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
 
-  return resolvedDatabase
+  const parsedValue = Number.parseInt(value, 10);
+
+  return Number.isInteger(parsedValue) && parsedValue > 0
+    ? parsedValue
+    : fallback;
+}
+
+export function normalizePublicListingsQuery(
+  input?: PublicListingsQueryInput,
+): PublicListingsQuery {
+  const trimmedStatus = input?.status?.trim();
+  const status = publicListingStatuses.includes(
+    trimmedStatus as PublicListingStatus,
+  )
+    ? (trimmedStatus as PublicListingStatus)
+    : "active";
+
+  const page = normalizePositiveInteger(input?.page, 1);
+  const requestedPageSize = normalizePositiveInteger(input?.pageSize, 6);
+  const pageSize = listingPageSizes.includes(
+    requestedPageSize as ListingPageSize,
+  )
+    ? (requestedPageSize as ListingPageSize)
+    : 6;
+
+  return {
+    status,
+    page,
+    pageSize,
+  };
+}
+
+export async function listPublicListingCards(
+  input?: PublicListingsQueryInput,
+  database?: Database,
+): Promise<PaginatedListingCardResult> {
+  const resolvedDatabase = await resolveDatabase(database);
+  const query = normalizePublicListingsQuery(input);
+  const whereClause = eq(listing.status, query.status);
+  const [{ totalCount }] = await resolvedDatabase
+    .select({
+      totalCount: sql<number>`count(*)`,
+    })
+    .from(listing)
+    .where(whereClause);
+
+  const items = await resolvedDatabase
     .select(listingCardSelection)
     .from(listing)
     .innerJoin(user, eq(listing.sellerId, user.id))
@@ -91,8 +167,20 @@ export async function listPublicListingCards(database?: Database) {
         eq(listingImage.isMain, true),
       ),
     )
-    .where(ne(listing.status, "draft"))
-    .orderBy(desc(listing.createdAt));
+    .where(whereClause)
+    .orderBy(desc(listing.createdAt))
+    .limit(query.pageSize)
+    .offset((query.page - 1) * query.pageSize);
+
+  return {
+    items,
+    totalCount,
+    page: query.page,
+    pageSize: query.pageSize,
+    pageCount: totalCount === 0 ? 0 : Math.ceil(totalCount / query.pageSize),
+    hasPreviousPage: query.page > 1,
+    hasNextPage: query.page * query.pageSize < totalCount,
+  };
 }
 
 export async function listSellerListingCards(

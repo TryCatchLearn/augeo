@@ -1,344 +1,362 @@
-# Phase 2 Execution TODO
+# Phase 3 Execution TODO
 
-Created: 2026-03-25
+Created: 2026-03-27
 Status: Planning complete, implementation pending
 
 ## Objective
 
-Deliver Phase 2 AI seller tooling as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
+Deliver Phase 3 browse improvements as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
 
 ## Execution Order
 
-- `2A` blocks all later Phase 2 work.
-- `2B` depends on `2A`.
+- `3A` blocks `3B`.
+- `3A` and `3B` block `3C`.
+- `3A` blocks `3D`.
+- `3D` should land after the public and dashboard query contracts are settled.
 
 ## Locked Decisions
 
-- `tasks/TODO.md` is the active standalone execution document for Phase 2.
+- `tasks/TODO.md` is the active standalone execution document for Phase 3.
 - `tasks/SPEC.md` remains the concise phase summary and tracker.
-- Shared AI model policy for all Phase 2 features:
-  - primary: `google/gemini-2.5-flash-lite`
-  - fallback: `openai/gpt-4o-mini`
-- One user action equals one logical AI request.
-- Internal model fallback does not consume extra quota.
-- AI features use the Vercel AI SDK through Vercel AI Gateway.
-- Add `AI_GATEWAY_API_KEY` to `.env.example` during implementation.
-- Local development continues to read secrets from `.env.local`.
-- Shared AI logic stays server-only under `src/server/`.
-- Phase 2 does not persist prompts or raw model outputs in the database.
-- Add `listing.aiDescriptionGenerationCount` as `integer not null default 0`.
-- Smart Listing Creator is available only on `/sell`.
-- Smart Listing Creator input is the uploaded listing image only.
-- Smart Listing Creator does not use seller profile data, session-derived personalization, or other user context.
-- Smart Listing Creator generates:
-  - `title`
-  - `description`
+- Phase 3 is a browse/discovery enhancement phase, not a public detail-page build phase.
+- `/listings` uses URL-driven, server-rendered browse state from `searchParams`.
+- Public `/listings` defaults to `status=active`.
+- Public status tabs are locked to:
+  - `active`
+  - `scheduled`
+  - `ended`
+- `/dashboard/listings` keeps its existing seller status tabs:
+  - `draft`
+  - `active`
+  - `scheduled`
+  - `ended`
+- `/dashboard/listings` adopts shared pagination only; it does not adopt the public filter/search controls row.
+- Navbar search is always visible.
+- On desktop, the navbar search sits centered between the brand and the right-side nav/account controls.
+- On smaller screens, the navbar search moves to a full-width second row and remains visible.
+- Navbar search submits only on:
+  - Enter key
+  - search button click
+- Navbar search does not debounce or auto-submit while typing.
+- Searching from a non-`/listings` route navigates to `/listings?q=...`.
+- Searching from `/listings` preserves the current `status`, `category`, `price`, `sort`, and `pageSize`, and resets `page=1`.
+- Empty search input falls back to browse behavior.
+- On `/listings`, status, category, price, sort, search, and page-size changes all reset `page=1`.
+- Filter dropdowns and sort apply immediately on selection change.
+- Reset clears:
   - `category`
-  - `condition`
-  - `suggestedStartingPriceCents`
-- Smart Listing Creator never suggests reserve price.
-- Smart Listing Creator must save only existing category enum values.
-- Invalid or low-confidence category output resolves to `other`.
-- Smart Listing Creator success keeps the current redirect-to-detail flow after draft creation.
-- Smart Listing Creator failure after both models fail keeps the user on `/sell`.
-- Smart Listing Creator failure UI must offer:
-  - `Retry AI`
-  - `Continue without AI`
-- Manual non-AI fallback draft payload is locked to:
-  - `title`: `Untitled draft`
-  - `description`: `Add a seller-written description before publishing.`
-  - `location`: `Add location`
-  - `category`: `other`
-  - `condition`: `good`
-  - `startingBidCents`: `100`
-  - `reservePriceCents`: `null`
-  - `startsAt`: `null`
-  - `endsAt`: `now + 7 days`
-  - `status`: `draft`
-- The existing seed-based rich fake-default draft generation is removed from the main `/sell` success path.
-- AI Description Enhancer is available only to the draft owner on `/listings/[id]/edit`.
-- AI Description Enhancer tone options are:
-  - `concise`
-  - `max_hype`
-  - `sarcastic`
-  - `friendly`
-- AI Description Enhancer UI uses the existing `Select` primitive as a dropdown.
-- Default description-enhancer tone is `friendly`.
-- AI Description Enhancer streams text into an on-page preview panel.
-- AI Description Enhancer post-generation buttons are:
-  - `Regenerate`
-  - `Accept`
-  - `Cancel`
-- Description enhancement is capped at `10` total user-initiated AI runs per listing.
-- The initial generate counts toward the limit.
-- Every regenerate counts toward the limit.
-- Changing tone alone does not count toward the limit.
-- Remaining runs display as `10 - aiDescriptionGenerationCount`.
-- When the limit is reached, generate/regenerate controls are disabled and a limit message is shown.
-- `Accept` updates the current form description in client state only.
-- The user must still click `Save Draft` to persist the accepted description to the database.
-- There is no special undo after `Accept`; manual editing remains the recovery path.
-- Description enhancement uses a route handler, not a server action, because the response must stream.
-- Seller ownership and `draft` status are validated before enhancement quota is consumed.
-- Quota increments once per accepted generate/regenerate request.
-- Primary-to-fallback handoff within one request does not increment quota again.
-- Description enhancer prompt input is limited to:
-  - current listing title
-  - current listing category
-  - current listing condition
-  - current listing description
-- Description enhancer must not use seller profile data or unrelated user context.
-- Description enhancer output rules:
-  - `50-200` words
-  - tone-appropriate
-  - never invent features or specs not present in the source description
-- Stream provisional text into the preview panel while generating.
-- Only enable `Accept` after the completed response passes final validation.
-- Validation failure or total AI failure must preserve the existing textarea value and show a recoverable error.
+  - `price`
+  - `sort`
+- Reset preserves:
+  - `status`
+  - `q`
+  - `pageSize`
+- Reset always sets `page=1`.
+- Pagination is offset-based and URL-driven through `page` and `pageSize`.
+- Shared page-size options are locked to:
+  - `6`
+  - `12`
+  - `18`
+  - `24`
+- Phase 3 price filtering and sorting use `startingBidCents`.
+- `sort=most_bids` exists in the UI and URL contract during Phase 3.
+- `sort=most_bids` is a temporary no-op in Phase 3 and must resolve to the same ordering as `sort=newest` until Phase 4 adds real bid persistence.
+- Search matching is simple case-insensitive contains matching against `title` and `description`.
+- Phase 3 does not add full-text search, tokenization, stemming, debounce, or auto-search.
+- Sticky pagination is sticky to the bottom of the page content area, not the viewport root.
+- The immediate follow-up session for this work is docs-only: update planning docs now, do not implement product code in this change.
 
 ## Shared Interfaces And Rules
 
-### Database changes
+### Seed target
 
-- Add `aiDescriptionGenerationCount` to the `listing` table.
-- Type: integer
-- Nullability: non-null
-- Default: `0`
-- Purpose: persist the per-listing AI Description Enhancer usage count.
+- Expand seed data from `10` listings to exactly `20`.
+- Distribute sellers `8 / 6 / 6` across Bob, Alice, and Charlie.
+- Lock status distribution to:
+  - `9 active`
+  - `4 scheduled`
+  - `4 ended`
+  - `3 draft`
+- Bob should own `7` active listings so both `/listings` and `/dashboard/listings?status=active` exercise pagination with `pageSize=6`.
+- Every seeded listing gets exactly one main image.
+- Seed image URLs use stable picsum seeds in the format:
+  - `https://picsum.photos/seed/<slug>/1200/900`
+- Titles and image slugs should be chosen together so each picsum image is at least plausibly aligned with the listing.
+- Seed data should cover the listing category and condition enums broadly enough to support realistic visual testing across multiple combinations.
+- At least `4` seeded listings must have future `startsAt` values and `status=scheduled`.
+- At least `4` seeded listings must have past `endsAt` values and `status=ended`.
+- Active listings must have future `endsAt` values.
+- Draft listings remain present for seller dashboard coverage only and never appear on public `/listings`.
 
-### Environment
+### Shared browse query/result contract
 
-- Add `AI_GATEWAY_API_KEY` to `.env.example`.
-- Keep `.env.local` as the local-development secret source.
-- Retain existing Cloudinary variables unchanged.
+- Add a typed public listings query parser/normalizer.
+- Add a typed dashboard listings query parser/normalizer.
+- Public `/listings` query params:
+  - `status=active|scheduled|ended`
+  - `q=<string>`
+  - `category=<listing category enum>`
+  - `price=lt_10|lt_50|lt_100|lt_500`
+  - `sort=newest|ending_soonest|most_bids|price_asc|price_desc`
+  - `page=<1-based integer>`
+  - `pageSize=6|12|18|24`
+- Dashboard `/dashboard/listings` query params:
+  - `status=draft|active|scheduled|ended`
+  - `page=<1-based integer>`
+  - `pageSize=6|12|18|24`
+- Public invalid or missing values normalize to:
+  - `status=active`
+  - empty `q`
+  - no category filter
+  - no price filter
+  - `sort=newest`
+  - `page=1`
+  - `pageSize=6`
+- Dashboard invalid or missing values normalize to:
+  - `status=draft`
+  - `page=1`
+  - `pageSize=6`
+- Search input is trimmed before query normalization.
+- An empty trimmed search string means “no search filter.”
+- Listing query results for public and dashboard pages must return:
+  - paginated items
+  - `totalCount`
+  - enough page/window metadata for the shared pagination component
+- Public browse queries must never return draft listings.
+- Public browse status filtering is exact by selected status.
 
-### Shared AI service contract
+### Shared search and sort rules
 
-- Expand `src/server/ai.ts` into the shared Phase 2 AI boundary.
-- Keep the module server-only.
-- Responsibilities:
-  - model selection and fallback orchestration
-  - Vercel AI Gateway provider wiring
-  - structured object generation for Smart Listing Creator
-  - streamed text generation for AI Description Enhancer
-  - shared fallback semantics where one user action equals one request
-- The service module should expose clear seams for:
-  - Smart Listing Creator structured generation
-  - Description Enhancer streamed generation
-  - primary-to-fallback retry within the same request
-- AI output must always be validated before it can affect saved data or accepted UI state.
+- Search uses simple case-insensitive `LIKE`/contains matching against:
+  - `listing.title`
+  - `listing.description`
+- Search does not tokenize, stem, or use SQLite FTS in Phase 3.
+- Stable sort rules for offset pagination are locked to:
+  - `newest`: `createdAt desc`
+  - `ending_soonest`: `endsAt asc`, then `createdAt desc`
+  - `most_bids`: same ordering as `newest` during Phase 3
+  - `price_asc`: `startingBidCents asc`, then `createdAt desc`
+  - `price_desc`: `startingBidCents desc`, then `createdAt desc`
+- Price filter options map to `startingBidCents` thresholds:
+  - `lt_10`
+  - `lt_50`
+  - `lt_100`
+  - `lt_500`
 
-### Shared schemas and normalization
+### Shared UI contract
 
-- Smart Listing Creator structured result schema:
-  - `title`
-  - `description`
+- Add a reusable public listings controls row for `/listings`.
+- The controls row sits on a single row below the page heading.
+- Controls row layout is locked to:
+  - left: public status tabs
+  - right: category dropdown, price dropdown, sort dropdown, reset button
+- Add a listings-aware navbar search component used by `SiteHeader`.
+- Add a reusable shared pagination component used by:
+  - `/listings`
+  - `/dashboard/listings`
+- Shared pagination layout is locked to:
+  - left: result count text
+  - center: shadcn-style pagination controls
+  - right: four page-size buttons
+
+### Shared behavior
+
+- All browse state is URL-driven through `searchParams`.
+- Changing status, category, price, sort, search, or page size resets `page=1`.
+- Page links preserve the rest of the active query state.
+- Result count format is `start-end of total`.
+- Empty-state count format is `0-0 of 0`.
+- Partial final pages must use the true ending record number.
+- `/dashboard/listings` keeps its seller status tabs above the results grid and adopts pagination beneath the results only.
+
+## 3A - Seed Data and Status Tabs
+
+Status: Implemented on 2026-03-27
+
+### Deliverables
+
+- Seed data expanded from `10` listings to `20`.
+- Seed data covers a wider range of categories and conditions for realistic UI testing.
+- Public `/listings` gets URL-backed status tabs:
+  - `Active`
+  - `Scheduled`
+  - `Ended`
+- Existing dashboard seller tabs remain intact.
+- Public listings query contract is finalized around status filtering and pagination-ready results.
+
+### Implementation tasks
+
+- Update the seed plan in the implementation docs to expand the dataset and lock the exact seller and status distribution from the shared rules section.
+- Require at least `4` scheduled listings with future `startsAt`.
+- Require at least `4` ended listings with past `endsAt`.
+- Keep active listings with future `endsAt`.
+- Keep some draft listings for seller dashboard coverage.
+- Document that `/listings` filters by exact public status and never includes drafts.
+- Document that invalid public `status` values fall back to `active`.
+- Document that public status tabs are URL-backed and rendered below the `/listings` page heading.
+- Document that `/dashboard/listings` keeps its existing seller-status tab behavior unchanged during 3A.
+- Require the query-layer work for 3A to return both filtered results and `totalCount` so 3D can build on the same contract without reshaping it.
+
+### Test tasks
+
+- Seed smoke-check expectations for:
+  - total listing count
+  - counts by status
+  - counts by seller
+  - Bob active-listing count
+- Integration tests for public status-tab query behavior.
+- Integration tests for invalid public `status` normalization to `active`.
+- Integration tests proving dashboard seller tabs remain unchanged.
+
+### Exit criteria
+
+- Seed data supports realistic visual testing for status tabs and future pagination.
+- `/listings` switches correctly among active, scheduled, and ended results by URL state.
+- `/dashboard/listings` continues to work with `draft`, `active`, `scheduled`, and `ended` tabs.
+
+## 3B - Filter Dropdowns & Sort
+
+Status: Not started
+
+### Deliverables
+
+- `/listings` gets a single controls row below the heading.
+- The right side of the row contains:
+  - category dropdown
+  - price dropdown
+  - sort dropdown
+  - reset button
+- Public listings query contract expands to support category, price, and sort.
+
+### Implementation tasks
+
+- Lock category options to `All Categories` plus every existing `listingCategories` enum value rendered with user-facing labels.
+- Lock price options to:
+  - `Any Price`
+  - `< $10`
+  - `< $50`
+  - `< $100`
+  - `< $500`
+- Lock sort options to:
+  - `Newest`
+  - `Ending Soonest`
+  - `Most Bids`
+  - `Price Low→High`
+  - `Price High→Low`
+- Document that the price filter uses `startingBidCents`.
+- Document that category and price filters combine with the selected status and any active search query.
+- Document that filter and sort changes apply immediately on selection change and reset `page=1`.
+- Document that reset preserves:
+  - `status`
+  - `q`
+  - `pageSize`
+- Document that reset clears:
   - `category`
-  - `condition`
-  - `suggestedStartingPriceCents`
-- Category normalization rules:
-  - accept only existing listing category enums
-  - coerce invalid or low-confidence category output to `other`
-- Condition normalization rules:
-  - accept only existing listing condition enums
-  - reject invalid condition output and treat it as AI failure for that request
-- Price normalization rules:
-  - output is integer cents
-  - output must be positive
-  - reserve price is not part of the schema
-- Description Enhancer schema/rules:
-  - tone enum: `concise | max_hype | sarcastic | friendly`
-  - final validated output length: `50-200` words
-  - reject outputs that invent features/specs beyond the source description
+  - `price`
+  - `sort`
+- Document that reset always returns `page=1`.
+- Call out explicitly that `Most Bids` is a temporary no-op in Phase 3 and resolves to the same ordering as `Newest`.
+- Document that invalid category, price, and sort values are ignored and normalized back to defaults.
 
-### Shared prompt rules
+### Test tasks
 
-- Do not use seller profile data, account history, or unrelated session context.
-- Smart Listing Creator prompt input is the uploaded listing image only.
-- Description Enhancer prompt input is listing text plus selected tone only.
-- Prompts must explicitly instruct the model not to invent facts, accessories, specs, defects, provenance, or condition details that are not evident from the allowed input.
+- Unit tests for public query-param parsing and normalization.
+- Unit tests for category, price, and sort mapping helpers.
+- Integration tests for category filtering.
+- Integration tests for price filtering.
+- Integration tests for each real sort mode.
+- Integration test proving `sort=most_bids` resolves to the default ordering during Phase 3.
 
-## 2A - Smart Listing Creator On `/sell`
+### Exit criteria
+
+- `/listings` supports status, category, price, and sort in combination.
+- Reset produces the locked preservation and clearing behavior.
+- The implementation docs leave no ambiguity about how `Most Bids` behaves before Phase 4.
+
+## 3C - Search
 
 Status: Not started
 
 ### Deliverables
 
-- Shared AI server module introduced for structured generation and fallback.
-- `/sell` first-image draft creation flow upgraded from fake seeded defaults to AI-generated suggestions on success.
-- Smart Listing Creator limited to the uploaded image as model input.
-- AI-generated listing draft saves:
-  - title
-  - description
-  - category
-  - condition
-  - starting bid
-- Total AI failure keeps the user on `/sell` with retry and manual fallback actions.
-- `Continue without AI` creates a draft with the locked manual fallback payload.
+- Navbar search is centered and always visible.
+- Search submit behavior works on `/listings` and from any other page.
+- Search applies to listing title and description with simple contains matching only.
 
 ### Implementation tasks
 
-- Add the Phase 2 dependency and environment documentation needed for Vercel AI Gateway and the Vercel AI SDK.
-- Expand `src/server/ai.ts` into a production-facing AI boundary with:
-  - primary model selection
-  - fallback model selection
-  - Vercel AI Gateway configuration
-  - structured object generation
-  - deterministic fallback orchestration
-- Add shared Smart Listing Creator prompt builder(s) and result schema(s).
-- Add shared normalization helpers for:
-  - category mapping to existing enums
-  - condition validation against existing enums
-  - starting-price cents normalization
-- Replace the current seed-based fake-default success path in the draft-creation mutation flow.
-- Keep the existing Cloudinary upload step first.
-- After Cloudinary upload succeeds:
-  - send the uploaded image as the only model input
-  - run Smart Listing Creator with the primary model
-  - retry the same logical request against the fallback model on provider/model failure
-  - validate and normalize the result
-  - create the draft row and first image row using the AI result
-  - set `reservePriceCents` to `null`
-  - keep `startsAt` as `null`
-  - set `endsAt` to `now + 7 days`
-  - set `status` to `draft`
-  - redirect to `/listings/[id]`
-- Total AI failure path on `/sell`:
-  - keep the user on the page
-  - preserve the uploaded image state if practical
-  - show a recoverable error message
-  - show `Retry AI`
-  - show `Continue without AI`
-- `Retry AI` behavior:
-  - rerun the same Smart Listing Creator request using the already uploaded image reference
-  - do not upload the image to Cloudinary again unless the client lost the upload result
-- `Continue without AI` behavior:
-  - create the draft immediately with the locked manual fallback payload
-  - attach the already uploaded image as the main image
-  - redirect to `/listings/[id]`
-- Update copy in the `/sell` UI to reflect AI-assisted draft creation instead of deterministic placeholder generation.
-- Ensure category and condition values saved by Smart Listing Creator match the existing Drizzle enum-backed listing fields.
-- Preserve current auth rules for `/sell`.
+- Document the desktop header layout with the search centered between the brand area and the right-side nav/account controls.
+- Document the mobile header layout with the search moved to a full-width second row while remaining visible.
+- Lock search form behavior to:
+  - Enter key submits
+  - search button click submits
+  - no debounce
+  - no auto-submit while typing
+- Lock route behavior so that, on `/listings`, search submit updates `q`, preserves current public browse state, and resets `page=1`.
+- Lock route behavior so that, from any non-`/listings` route, search submit navigates to:
+  - `/listings?q=<term>` when the trimmed query is non-empty
+  - `/listings` when the trimmed query is empty
+- Document that search matching is case-insensitive `LIKE` against `title` and `description`.
+- Document that empty search falls back to browse behavior.
+- Document that search combines with status, category, price, sort, and pagination rules on `/listings`.
 
 ### Test tasks
 
-- Unit tests for:
-  - Smart Listing Creator prompt shaping from uploaded image input only
-  - category normalization to existing enum values
-  - invalid or low-confidence category mapping to `other`
-  - condition validation
-  - starting-price normalization into positive integer cents
-  - one-request primary-to-fallback orchestration
-  - manual non-AI fallback payload generation
-- Integration tests for:
-  - `/sell` auth protection remains intact
-  - successful AI-assisted first-image draft creation
-  - redirect to `/listings/[id]` after AI success
-  - total AI failure showing retry and manual fallback controls
-  - `Continue without AI` creating a draft with the locked fallback payload
-  - total AI failure preserving manual listing creation access instead of blocking the seller
+- App-level tests for header search rendering.
+- App-level tests for explicit submit behavior.
+- Integration tests for search query filtering against titles.
+- Integration tests for search query filtering against descriptions.
+- Integration tests for search combined with status and filters.
+- Integration tests for non-`/listings` search redirect behavior.
 
 ### Exit criteria
 
-- An authenticated seller can upload one image on `/sell`, receive AI-generated draft details, and land on the draft detail page.
-- The saved category always matches the existing category enum set.
-- Total AI failure does not block listing creation because `Continue without AI` remains available.
-- The old seed-based fake-default success path is no longer the default draft-creation flow.
+- Search is always visible in the header.
+- Search runs only on explicit submit.
+- `/listings` can refine results with `q` plus active filters and sort.
 
-## 2B - AI Description Enhancer On `/listings/[id]/edit`
+## 3D - Pagination
 
 Status: Not started
 
 ### Deliverables
 
-- Draft-owner-only AI Description Enhancer added to the existing edit page.
-- Tone dropdown added with `Concise`, `Max-hype`, `Sarcastic`, and `Friendly`.
-- Generated description text streams into a preview panel below the controls.
-- Post-generation actions added:
-  - `Regenerate`
-  - `Accept`
-  - `Cancel`
-- Loading spinner shown while AI is generating.
-- Regeneration/generation usage count persisted per listing with max `10`.
+- Shared pagination component used by `/listings` and `/dashboard/listings`.
+- Sticky bottom pagination layout with result count, controls, and page-size buttons.
+- Offset-based pagination that respects all active query state.
 
 ### Implementation tasks
 
-- Add the `aiDescriptionGenerationCount` column to the listing schema and generate/check in the Drizzle migration.
-- Extend listing queries for the edit page so the editor receives the persisted generation count.
-- Extend listing mutation/query types so the client can render remaining generations.
-- Add a description-enhancer tone enum and any shared labels/helpers needed for UI rendering.
-- Add prompt builder(s) for description enhancement using only:
-  - title
-  - category
-  - condition
-  - existing description
-  - selected tone
-- Add final validation helpers for:
-  - `50-200` word length
-  - tone selection
-  - “no invented specs/features” instruction compliance
-- Add a route handler for streamed description generation.
-- Route-handler responsibilities:
-  - require authenticated session
-  - load the requested listing
-  - verify seller ownership
-  - verify `draft` status
-  - verify remaining quota before generation starts
-  - increment quota once for the accepted request
-  - stream model output into the response
-  - retry against the fallback model within the same request if the primary fails before a valid stream is established
-- Update the draft editor UI near the description field:
-  - add the tone dropdown
-  - add `Refine description with AI`
-  - show remaining runs
-  - show spinner/loading state while generating
-  - show a preview panel below the controls
-- Preview panel behavior:
-  - stream provisional text as it arrives
-  - keep the original textarea value untouched during generation
-  - after a successful validated completion, show `Regenerate`, `Accept`, and `Cancel`
-  - on validation failure, show an error and keep the textarea unchanged
-- `Accept` behavior:
-  - overwrite the React Hook Form description field with the generated text
-  - do not persist to DB yet
-- `Cancel` behavior:
-  - discard the current generated preview
-  - keep the form description as-is
-- `Regenerate` behavior:
-  - use the currently selected tone
-  - consume one additional generation if quota remains
-- Limit-reached behavior:
-  - disable generate/regenerate controls
-  - show a clear remaining-count/limit-reached message
-- Ensure the existing `Save Draft` flow still controls database persistence after `Accept`.
-- Preserve existing edit-page auth and draft-only access rules.
+- Lock the shared pagination layout to:
+  - left: result count text
+  - center: shadcn-style pagination controls
+  - right: four page-size buttons for `6`, `12`, `18`, and `24`
+- Document that page-size changes update `pageSize` and reset `page=1`.
+- Document that previous, next, and page-number links preserve the rest of the active query state.
+- Require both public and dashboard listing queries to return:
+  - paginated items
+  - `totalCount`
+  - page/window metadata required by the shared component
+- Document sticky placement at the bottom of each page content section so pagination stays visible while scrolling long result lists.
+- Document empty and partial-page cases:
+  - no results render `0-0 of 0`
+  - the last page uses the true ending number
+- Document that `/dashboard/listings` adopts pagination only and keeps existing seller status tabs above the results grid.
 
 ### Test tasks
 
-- Unit tests for:
-  - tone prompt shaping
-  - `50-200` word validation
-  - quota accounting helpers
-  - one-request/one-quota behavior with internal fallback
-  - remaining-generation display helpers if extracted
-- Integration tests for:
-  - draft-owner-only access to the AI Description Enhancer
-  - tone selection driving the request payload
-  - streaming preview rendering
-  - loading spinner while generation is in progress
-  - `Accept` overwriting form state only
-  - `Cancel` preserving the current textarea content
-  - `Regenerate` consuming quota
-  - limit-reached UI disabling generate/regenerate
-  - accepted description persisting only after the user clicks `Save Draft`
-  - validation or AI failure preserving the existing textarea value
+- Unit tests for offset and page-window calculations.
+- Unit tests for result-count formatting.
+- Integration tests for `/listings` pagination preserving search, filter, and sort state.
+- Integration tests for `/dashboard/listings` pagination preserving seller status.
+- App-level tests for page-size selection behavior.
+- App-level tests for sticky pagination rendering hooks if practical.
 
 ### Exit criteria
 
-- A draft owner can generate, preview, regenerate, and accept streamed AI description text on `/listings/[id]/edit`.
-- The accepted description does not persist until `Save Draft` succeeds.
-- Generation usage is persisted per listing and capped at `10`.
-- Limit-reached behavior is visible and enforced in both UI and server-side request validation.
+- Both pages use the same pagination component and query contract.
+- Pagination respects all active filters, search, sort, and seller status.
+- Page-size changes and page navigation are deterministic and URL-driven.
 
 ## Final Verification Checklist
 
@@ -349,5 +367,6 @@ Status: Not started
 
 ## Completion Notes
 
-- Update `tasks/SPEC.md` tracker checkboxes as shared AI infrastructure, `2A`, `2B`, migration work, and test milestones land.
-- If Phase 2 scope changes, update this file before coding so later sessions inherit the new source of truth.
+- Update `tasks/SPEC.md` tracker checkboxes as the Phase 3 query contract, seed work, sub-phases, and tests land.
+- Keep `tasks/TODO.md` self-sufficient; future implementation sessions should not need to reopen `tasks/SPEC.md` for execution details.
+- If Phase 3 scope changes, update this file before coding so later sessions inherit the current source of truth.

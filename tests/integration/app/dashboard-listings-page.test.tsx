@@ -87,4 +87,30 @@ describe("Dashboard listings page", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("keeps the existing seller tab normalization when status is invalid", async () => {
+    const session = createMockSession();
+
+    mockRequireSession.mockResolvedValue(session);
+    mockListSellerListingCards.mockResolvedValue([]);
+
+    const { default: DashboardListingsPage } = await import(
+      "@/app/dashboard/listings/page"
+    );
+
+    render(
+      await DashboardListingsPage({
+        searchParams: Promise.resolve({ status: "mystery" }),
+      }),
+    );
+
+    expect(mockListSellerListingCards).toHaveBeenCalledWith(
+      session.user.id,
+      "draft",
+    );
+    expect(screen.getByRole("link", { name: "Drafts" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
 });
