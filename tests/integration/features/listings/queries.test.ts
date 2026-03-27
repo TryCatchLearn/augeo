@@ -228,6 +228,191 @@ describe("listing queries", () => {
     expect(listings.items.map((item) => item.title)).toEqual(["Pocket Camera"]);
   });
 
+  it("filters public listings by a case-insensitive title search query", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Studio Camera",
+        description: "Mirrorless body with lens",
+        location: "Portland, OR",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 22_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-29T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Workshop Lamp",
+        description: "Bright bench light",
+        location: "Portland, OR",
+        category: "home_garden",
+        condition: "good",
+        startingBidCents: 4_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-30T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      { status: "active", q: "  cAmErA  " },
+      testDatabase.db,
+    );
+
+    expect(listings.totalCount).toBe(1);
+    expect(listings.items.map((item) => item.title)).toEqual(["Studio Camera"]);
+  });
+
+  it("filters public listings by a case-insensitive description search query", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Collector Watch",
+        description: "Features a rare BLUE dial and exhibition caseback.",
+        location: "Boston, MA",
+        category: "jewelry_watches",
+        condition: "good",
+        startingBidCents: 49_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-30T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Canvas Tote",
+        description: "Natural cotton everyday bag.",
+        location: "Boston, MA",
+        category: "fashion",
+        condition: "good",
+        startingBidCents: 3_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-31T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      { status: "active", q: "blue dial" },
+      testDatabase.db,
+    );
+
+    expect(listings.totalCount).toBe(1);
+    expect(listings.items.map((item) => item.title)).toEqual([
+      "Collector Watch",
+    ]);
+  });
+
+  it("combines search with the selected status and active filters", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Travel Camera",
+        description: "Compact body with everyday zoom",
+        location: "Seattle, WA",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 4_500,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-29T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Travel Camera",
+        description: "Same term but outside the price filter",
+        location: "Seattle, WA",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 7_500,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-30T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Travel Camera",
+        description: "Same term but different status",
+        location: "Seattle, WA",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 4_000,
+        reservePriceCents: null,
+        startsAt: new Date("2026-04-01T12:00:00.000Z"),
+        endsAt: new Date("2026-04-05T12:00:00.000Z"),
+        status: "scheduled",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Travel Camera",
+        description: "Same term but different category",
+        location: "Seattle, WA",
+        category: "collectibles",
+        condition: "good",
+        startingBidCents: 4_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-31T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      {
+        status: "active",
+        q: "camera",
+        category: "electronics",
+        price: "lt_50",
+      },
+      testDatabase.db,
+    );
+
+    expect(listings.totalCount).toBe(1);
+    expect(listings.items.map((item) => item.startingBidCents)).toEqual([4500]);
+  });
+
   it("sorts public listings by newest by default and for most bids", async () => {
     const sellerId = randomUUID();
 

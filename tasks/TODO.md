@@ -275,7 +275,7 @@ Status: Not started
 
 ## 3C - Search
 
-Status: Not started
+Status: Implemented on 2026-03-27
 
 ### Deliverables
 

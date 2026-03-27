@@ -461,7 +461,7 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [x] `tasks/TODO.md` execution plan finalized
 - [x] Seed data plan finalized
 - [x] Browse query contract finalized
-- [ ] Search/filter/sort contract finalized
+- [x] Search/filter/sort contract finalized
 - [ ] Shared pagination contract finalized
 - [ ] Unit tests completed
 - [ ] Integration tests completed

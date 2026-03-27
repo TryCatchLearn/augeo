@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LinkButton } from "@/components/ui/button";
 import { UserNav } from "@/components/user-nav";
 import { getSession } from "@/features/auth/session";
+import { NavbarSearch } from "@/features/listings/components/navbar-search";
 
 const navLinks = [
   {
@@ -16,46 +17,52 @@ export async function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-1000 isolate border-b border-border/70 bg-[color-mix(in_oklab,var(--color-background)_94%,black_6%)] shadow-[0_12px_38px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-        <Link
-          href="/"
-          className="flex items-center gap-3 transition-opacity hover:opacity-90"
-        >
-          <span className="flex size-10 items-center justify-center rounded-full border border-primary/25 bg-card shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_24%,transparent),0_0_22px_color-mix(in_oklab,var(--color-primary)_16%,transparent)]">
-            <Gavel aria-hidden="true" className="size-5 text-primary" />
-          </span>
-          <span className="text-lg font-semibold tracking-[0.26em] uppercase text-primary sm:text-xl">
-            Augeo
-          </span>
-        </Link>
+      <div className="mx-auto w-full max-w-6xl px-6 py-4">
+        <div className="flex flex-wrap items-center gap-3 md:grid md:grid-cols-[auto_minmax(18rem,30rem)_auto] md:items-center md:gap-6">
+          <Link
+            href="/"
+            className="flex items-center gap-3 transition-opacity hover:opacity-90"
+          >
+            <span className="flex size-10 items-center justify-center rounded-full border border-primary/25 bg-card shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_24%,transparent),0_0_22px_color-mix(in_oklab,var(--color-primary)_16%,transparent)]">
+              <Gavel aria-hidden="true" className="size-5 text-primary" />
+            </span>
+            <span className="text-lg font-semibold tracking-[0.26em] uppercase text-primary sm:text-xl">
+              Augeo
+            </span>
+          </Link>
 
-        <div className="flex items-center gap-3">
-          <nav className="flex items-center gap-6 text-sm font-medium">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-muted-foreground transition-colors hover:text-primary"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          <div className="order-3 w-full md:order-none md:justify-self-center">
+            <NavbarSearch />
+          </div>
 
-          {session ? (
-            <UserNav
-              name={session.user.name}
-              email={session.user.email}
-              image={session.user.image}
-            />
-          ) : (
-            <div className="flex items-center gap-2">
-              <LinkButton href="/login" variant="secondary">
-                Login
-              </LinkButton>
-              <LinkButton href="/register">Register</LinkButton>
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-3 md:ml-0 md:justify-self-end">
+            <nav className="flex items-center gap-6 text-sm font-medium">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-muted-foreground transition-colors hover:text-primary"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+
+            {session ? (
+              <UserNav
+                name={session.user.name}
+                email={session.user.email}
+                image={session.user.image}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <LinkButton href="/login" variant="secondary">
+                  Login
+                </LinkButton>
+                <LinkButton href="/register">Register</LinkButton>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
