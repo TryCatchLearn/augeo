@@ -126,6 +126,284 @@ describe("listing queries", () => {
     });
   });
 
+  it("filters public listings by category", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Vintage Receiver",
+        description: "Stereo equipment",
+        location: "Portland, OR",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 18_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-28T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Garden Bench",
+        description: "Teak seating",
+        location: "Portland, OR",
+        category: "home_garden",
+        condition: "good",
+        startingBidCents: 21_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-29T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      { status: "active", category: "electronics" },
+      testDatabase.db,
+    );
+
+    expect(listings.totalCount).toBe(1);
+    expect(listings.items.map((item) => item.title)).toEqual([
+      "Vintage Receiver",
+    ]);
+  });
+
+  it("filters public listings by starting bid price threshold", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Pocket Camera",
+        description: "Compact and travel ready",
+        location: "Austin, TX",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 4_500,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-28T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Studio Camera",
+        description: "Full-frame setup",
+        location: "Austin, TX",
+        category: "electronics",
+        condition: "good",
+        startingBidCents: 12_500,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-29T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      { status: "active", price: "lt_50" },
+      testDatabase.db,
+    );
+
+    expect(listings.totalCount).toBe(1);
+    expect(listings.items.map((item) => item.title)).toEqual(["Pocket Camera"]);
+  });
+
+  it("sorts public listings by newest by default and for most bids", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Earlier Listing",
+        description: "First created",
+        location: "Denver, CO",
+        category: "collectibles",
+        condition: "good",
+        startingBidCents: 8_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-30T12:00:00.000Z"),
+        status: "active",
+        createdAt: new Date("2026-03-10T08:00:00.000Z"),
+        updatedAt: new Date("2026-03-10T08:00:00.000Z"),
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Later Listing",
+        description: "Second created",
+        location: "Denver, CO",
+        category: "collectibles",
+        condition: "good",
+        startingBidCents: 12_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-31T12:00:00.000Z"),
+        status: "active",
+        createdAt: new Date("2026-03-11T08:00:00.000Z"),
+        updatedAt: new Date("2026-03-11T08:00:00.000Z"),
+      },
+    ]);
+
+    const newest = await listPublicListingCards(
+      { status: "active", sort: "newest" },
+      testDatabase.db,
+    );
+    const mostBids = await listPublicListingCards(
+      { status: "active", sort: "most_bids" },
+      testDatabase.db,
+    );
+
+    expect(newest.items.map((item) => item.title)).toEqual([
+      "Later Listing",
+      "Earlier Listing",
+    ]);
+    expect(mostBids.items.map((item) => item.title)).toEqual([
+      "Later Listing",
+      "Earlier Listing",
+    ]);
+  });
+
+  it("sorts public listings by ending soonest", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Ends Later",
+        description: "Second to close",
+        location: "Miami, FL",
+        category: "art",
+        condition: "good",
+        startingBidCents: 22_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-04-02T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Ends First",
+        description: "First to close",
+        location: "Miami, FL",
+        category: "art",
+        condition: "good",
+        startingBidCents: 24_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-04-01T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      { status: "active", sort: "ending_soonest" },
+      testDatabase.db,
+    );
+
+    expect(listings.items.map((item) => item.title)).toEqual([
+      "Ends First",
+      "Ends Later",
+    ]);
+  });
+
+  it("sorts public listings by price ascending and descending", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Higher Price",
+        description: "More expensive",
+        location: "Chicago, IL",
+        category: "fashion",
+        condition: "good",
+        startingBidCents: 19_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-30T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Lower Price",
+        description: "Less expensive",
+        location: "Chicago, IL",
+        category: "fashion",
+        condition: "good",
+        startingBidCents: 7_000,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-03-30T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const ascending = await listPublicListingCards(
+      { status: "active", sort: "price_asc" },
+      testDatabase.db,
+    );
+    const descending = await listPublicListingCards(
+      { status: "active", sort: "price_desc" },
+      testDatabase.db,
+    );
+
+    expect(ascending.items.map((item) => item.title)).toEqual([
+      "Lower Price",
+      "Higher Price",
+    ]);
+    expect(descending.items.map((item) => item.title)).toEqual([
+      "Higher Price",
+      "Lower Price",
+    ]);
+  });
+
   it("filters seller listings by status", async () => {
     const sellerId = randomUUID();
     const otherSellerId = randomUUID();

@@ -1,11 +1,20 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, like, lt, or, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { listing, listingImage, user } from "@/db/schema";
 import {
+  getPublicListingPriceThresholdCents,
+  type ListingPageSize,
+  normalizePublicListingsQuery,
+  type PublicListingSort,
+  type PublicListingsQueryInput,
+} from "@/features/listings/browse";
+import {
   canViewListingDetail,
   type ListingStatus,
 } from "@/features/listings/domain";
+
+export * from "@/features/listings/browse";
 
 export type ListingCardData = {
   id: string;
@@ -56,24 +65,6 @@ export type ListingImageAssetRecord = {
 
 type Database = LibSQLDatabase<typeof schema>;
 
-export const publicListingStatuses = ["active", "scheduled", "ended"] as const;
-export const listingPageSizes = [6, 12, 18, 24] as const;
-
-export type PublicListingStatus = (typeof publicListingStatuses)[number];
-export type ListingPageSize = (typeof listingPageSizes)[number];
-
-export type PublicListingsQueryInput = {
-  status?: string;
-  page?: string;
-  pageSize?: string;
-};
-
-export type PublicListingsQuery = {
-  status: PublicListingStatus;
-  page: number;
-  pageSize: ListingPageSize;
-};
-
 export type PaginatedListingCardResult = {
   items: ListingCardData[];
   totalCount: number;
@@ -105,41 +96,51 @@ const listingCardSelection = {
   imageUrl: listingImage.url,
 };
 
-function normalizePositiveInteger(value: string | undefined, fallback: number) {
-  if (!value) {
-    return fallback;
+function buildPublicListingWhereClause(
+  query: ReturnType<typeof normalizePublicListingsQuery>,
+) {
+  const conditions = [eq(listing.status, query.status)];
+
+  if (query.q.length > 0) {
+    const searchValue = `%${query.q.toLowerCase()}%`;
+    const searchCondition = or(
+      like(sql`lower(${listing.title})`, searchValue),
+      like(sql`lower(${listing.description})`, searchValue),
+    );
+
+    if (searchCondition) {
+      conditions.push(searchCondition);
+    }
   }
 
-  const parsedValue = Number.parseInt(value, 10);
+  if (query.category) {
+    conditions.push(eq(listing.category, query.category));
+  }
 
-  return Number.isInteger(parsedValue) && parsedValue > 0
-    ? parsedValue
-    : fallback;
+  if (query.price) {
+    conditions.push(
+      lt(
+        listing.startingBidCents,
+        getPublicListingPriceThresholdCents(query.price),
+      ),
+    );
+  }
+
+  return and(...conditions);
 }
 
-export function normalizePublicListingsQuery(
-  input?: PublicListingsQueryInput,
-): PublicListingsQuery {
-  const trimmedStatus = input?.status?.trim();
-  const status = publicListingStatuses.includes(
-    trimmedStatus as PublicListingStatus,
-  )
-    ? (trimmedStatus as PublicListingStatus)
-    : "active";
-
-  const page = normalizePositiveInteger(input?.page, 1);
-  const requestedPageSize = normalizePositiveInteger(input?.pageSize, 6);
-  const pageSize = listingPageSizes.includes(
-    requestedPageSize as ListingPageSize,
-  )
-    ? (requestedPageSize as ListingPageSize)
-    : 6;
-
-  return {
-    status,
-    page,
-    pageSize,
-  };
+function getPublicListingOrderBy(sort: PublicListingSort) {
+  switch (sort) {
+    case "ending_soonest":
+      return [asc(listing.endsAt), desc(listing.createdAt)] as const;
+    case "price_asc":
+      return [asc(listing.startingBidCents), desc(listing.createdAt)] as const;
+    case "price_desc":
+      return [desc(listing.startingBidCents), desc(listing.createdAt)] as const;
+    case "most_bids":
+    case "newest":
+      return [desc(listing.createdAt)] as const;
+  }
 }
 
 export async function listPublicListingCards(
@@ -148,7 +149,7 @@ export async function listPublicListingCards(
 ): Promise<PaginatedListingCardResult> {
   const resolvedDatabase = await resolveDatabase(database);
   const query = normalizePublicListingsQuery(input);
-  const whereClause = eq(listing.status, query.status);
+  const whereClause = buildPublicListingWhereClause(query);
   const [{ totalCount }] = await resolvedDatabase
     .select({
       totalCount: sql<number>`count(*)`,
@@ -168,7 +169,7 @@ export async function listPublicListingCards(
       ),
     )
     .where(whereClause)
-    .orderBy(desc(listing.createdAt))
+    .orderBy(...getPublicListingOrderBy(query.sort))
     .limit(query.pageSize)
     .offset((query.page - 1) * query.pageSize);
 
