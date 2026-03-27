@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  createPublicListingsSearchParams,
   type PublicListingPriceFilter,
   type PublicListingSort,
   type PublicListingsQuery,
@@ -37,31 +38,12 @@ export function PublicListingsControls({ query }: PublicListingsControlsProps) {
       ...updates,
       page: 1,
     };
-    const searchParams = new URLSearchParams();
+    const searchParams = createPublicListingsSearchParams(nextQuery);
+    const queryString = searchParams.toString();
 
-    searchParams.set("status", nextQuery.status);
-
-    if (nextQuery.q.length > 0) {
-      searchParams.set("q", nextQuery.q);
-    }
-
-    if (nextQuery.category) {
-      searchParams.set("category", nextQuery.category);
-    }
-
-    if (nextQuery.price) {
-      searchParams.set("price", nextQuery.price);
-    }
-
-    if (nextQuery.sort !== "newest") {
-      searchParams.set("sort", nextQuery.sort);
-    }
-
-    if (nextQuery.pageSize !== 6) {
-      searchParams.set("pageSize", String(nextQuery.pageSize));
-    }
-
-    router.push(`${pathname}?${searchParams.toString()}`);
+    router.push(
+      queryString.length > 0 ? `${pathname}?${queryString}` : pathname,
+    );
   }
 
   return (

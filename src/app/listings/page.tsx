@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { publicListingStatuses } from "@/features/listings/browse";
+import {
+  createPublicListingsSearchParams,
+  publicListingStatuses,
+} from "@/features/listings/browse";
 import { ListingCardGrid } from "@/features/listings/components/listing-card-grid";
+import { ListingsPagination } from "@/features/listings/components/listings-pagination";
 import { PublicListingsControls } from "@/features/listings/components/public-listings-controls";
 import { listingStatusLabels } from "@/features/listings/domain";
 import {
@@ -20,24 +24,19 @@ function getSingleSearchParamValue(
 }
 
 function buildStatusHref(
+  currentQuery: ReturnType<typeof normalizePublicListingsQuery>,
   searchParams: Record<string, string | string[] | undefined>,
   status: (typeof publicListingStatuses)[number],
 ) {
-  const nextSearchParams = new URLSearchParams();
+  const nextSearchParams = createPublicListingsSearchParams({
+    ...currentQuery,
+    status,
+    page: 1,
+    q: getSingleSearchParamValue(searchParams.q)?.trim() ?? currentQuery.q,
+  });
+  const queryString = nextSearchParams.toString();
 
-  for (const [key, value] of Object.entries(searchParams)) {
-    const resolvedValue = getSingleSearchParamValue(value);
-
-    if (!resolvedValue || key === "status" || key === "page") {
-      continue;
-    }
-
-    nextSearchParams.set(key, resolvedValue);
-  }
-
-  nextSearchParams.set("status", status);
-
-  return `/listings?${nextSearchParams.toString()}`;
+  return queryString.length > 0 ? `/listings?${queryString}` : "/listings";
 }
 
 export default async function ListingsPage({
@@ -85,7 +84,7 @@ export default async function ListingsPage({
             return (
               <Link
                 key={status}
-                href={buildStatusHref(resolvedSearchParams, status)}
+                href={buildStatusHref(query, resolvedSearchParams, status)}
                 className={cn(
                   "flex h-8 items-center rounded-lg border border-input/90 bg-input/45 px-3 text-sm font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,white_5%,transparent),0_0_0_1px_color-mix(in_oklab,var(--color-accent)_8%,transparent)] transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
                   isActive
@@ -106,6 +105,12 @@ export default async function ListingsPage({
       <div className="mt-10">
         <ListingCardGrid listings={listings.items} />
       </div>
+
+      <ListingsPagination
+        pathname="/listings"
+        searchParams={createPublicListingsSearchParams(query)}
+        pagination={listings}
+      />
     </section>
   );
 }

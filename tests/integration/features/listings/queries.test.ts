@@ -112,6 +112,16 @@ describe("listing queries", () => {
     expect(listings.items.find((item) => item.id === scheduledListingId)).toBe(
       undefined,
     );
+    expect(listings).toMatchObject({
+      page: 1,
+      pageSize: 6,
+      startResult: 1,
+      endResult: 1,
+      pageCount: 1,
+      pageNumbers: [1],
+      hasPreviousPage: false,
+      hasNextPage: false,
+    });
   });
 
   it("normalizes invalid public status values to active", () => {
@@ -589,7 +599,7 @@ describe("listing queries", () => {
     ]);
   });
 
-  it("filters seller listings by status", async () => {
+  it("filters seller listings by status with pagination metadata", async () => {
     const sellerId = randomUUID();
     const otherSellerId = randomUUID();
     const now = new Date("2026-03-21T12:00:00.000Z");
@@ -656,15 +666,30 @@ describe("listing queries", () => {
 
     const listings = await listSellerListingCards(
       sellerId,
-      "active",
+      {
+        status: "active",
+        page: "1",
+        pageSize: "6",
+      },
       testDatabase.db,
     );
 
-    expect(listings).toHaveLength(1);
-    expect(listings[0]).toMatchObject({
+    expect(listings.items).toHaveLength(1);
+    expect(listings.items[0]).toMatchObject({
       title: "Seller Active",
       status: "active",
       sellerName: "Seller One",
+    });
+    expect(listings).toMatchObject({
+      totalCount: 1,
+      page: 1,
+      pageSize: 6,
+      startResult: 1,
+      endResult: 1,
+      pageCount: 1,
+      pageNumbers: [1],
+      hasPreviousPage: false,
+      hasNextPage: false,
     });
   });
 

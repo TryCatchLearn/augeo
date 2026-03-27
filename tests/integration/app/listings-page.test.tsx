@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ListingCardData,
   PaginatedListingCardResult,
@@ -8,6 +8,7 @@ import type {
 const mockListPublicListingCards =
   vi.fn<() => Promise<PaginatedListingCardResult>>();
 const mockPublicListingsControls = vi.fn();
+const mockListingsPagination = vi.fn();
 
 vi.mock("@/features/listings/queries", () => ({
   listPublicListingCards: mockListPublicListingCards,
@@ -44,6 +45,14 @@ vi.mock("@/features/listings/components/public-listings-controls", () => ({
   },
 }));
 
+vi.mock("@/features/listings/components/listings-pagination", () => ({
+  ListingsPagination: (props: unknown) => {
+    mockListingsPagination(props);
+
+    return <div data-testid="listings-pagination" />;
+  },
+}));
+
 function createListingsResult(
   items: ListingCardData[],
 ): PaginatedListingCardResult {
@@ -52,13 +61,22 @@ function createListingsResult(
     totalCount: items.length,
     page: 1,
     pageSize: 6,
+    startResult: items.length > 0 ? 1 : 0,
+    endResult: items.length,
     pageCount: items.length > 0 ? 1 : 0,
+    pageNumbers: items.length > 0 ? [1] : [],
     hasPreviousPage: false,
     hasNextPage: false,
   };
 }
 
 describe("Listings page", () => {
+  beforeEach(() => {
+    mockListPublicListingCards.mockReset();
+    mockPublicListingsControls.mockReset();
+    mockListingsPagination.mockReset();
+  });
+
   it("renders public listing cards that link to listing detail pages", async () => {
     mockListPublicListingCards.mockResolvedValue(
       createListingsResult([
@@ -113,6 +131,7 @@ describe("Listings page", () => {
       "page",
     );
     expect(screen.getByTestId("public-listings-controls")).toBeInTheDocument();
+    expect(screen.getByTestId("listings-pagination")).toBeInTheDocument();
   });
 
   it("falls back to the active tab when the public status is invalid", async () => {
@@ -161,5 +180,37 @@ describe("Listings page", () => {
         pageSize: 12,
       },
     });
+  });
+
+  it("passes the shared browse state into pagination links", async () => {
+    mockListPublicListingCards.mockResolvedValue(createListingsResult([]));
+
+    const { default: ListingsPage } = await import("@/app/listings/page");
+
+    render(
+      await ListingsPage({
+        searchParams: Promise.resolve({
+          status: "scheduled",
+          q: "camera",
+          category: "electronics",
+          price: "lt_50",
+          sort: "price_desc",
+          page: "2",
+          pageSize: "12",
+        }),
+      }),
+    );
+
+    const paginationProps = mockListingsPagination.mock.calls.at(-1)?.[0] as {
+      pathname: string;
+      searchParams: URLSearchParams;
+      pagination: PaginatedListingCardResult;
+    };
+
+    expect(paginationProps.pathname).toBe("/listings");
+    expect(paginationProps.searchParams.toString()).toBe(
+      "status=scheduled&q=camera&category=electronics&price=lt_50&sort=price_desc&page=2&pageSize=12",
+    );
+    expect(paginationProps.pagination).toEqual(createListingsResult([]));
   });
 });

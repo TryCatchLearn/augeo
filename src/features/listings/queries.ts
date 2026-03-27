@@ -3,8 +3,11 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { listing, listingImage, user } from "@/db/schema";
 import {
+  getPaginationWindow,
   getPublicListingPriceThresholdCents,
+  getResultCountRange,
   type ListingPageSize,
+  normalizeDashboardListingsQuery,
   normalizePublicListingsQuery,
   type PublicListingSort,
   type PublicListingsQueryInput,
@@ -70,7 +73,10 @@ export type PaginatedListingCardResult = {
   totalCount: number;
   page: number;
   pageSize: ListingPageSize;
+  startResult: number;
+  endResult: number;
   pageCount: number;
+  pageNumbers: number[];
   hasPreviousPage: boolean;
   hasNextPage: boolean;
 };
@@ -143,6 +149,30 @@ function getPublicListingOrderBy(sort: PublicListingSort) {
   }
 }
 
+function createPaginatedListingCardResult(
+  items: ListingCardData[],
+  totalCount: number,
+  page: number,
+  pageSize: ListingPageSize,
+): PaginatedListingCardResult {
+  const pageCount = totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize);
+  const { pageNumbers } = getPaginationWindow(page, pageCount);
+  const { start, end } = getResultCountRange(page, pageSize, items.length);
+
+  return {
+    items,
+    totalCount,
+    page,
+    pageSize,
+    startResult: start,
+    endResult: end,
+    pageCount,
+    pageNumbers,
+    hasPreviousPage: page > 1,
+    hasNextPage: page * pageSize < totalCount,
+  };
+}
+
 export async function listPublicListingCards(
   input?: PublicListingsQueryInput,
   database?: Database,
@@ -173,25 +203,33 @@ export async function listPublicListingCards(
     .limit(query.pageSize)
     .offset((query.page - 1) * query.pageSize);
 
-  return {
+  return createPaginatedListingCardResult(
     items,
     totalCount,
-    page: query.page,
-    pageSize: query.pageSize,
-    pageCount: totalCount === 0 ? 0 : Math.ceil(totalCount / query.pageSize),
-    hasPreviousPage: query.page > 1,
-    hasNextPage: query.page * query.pageSize < totalCount,
-  };
+    query.page,
+    query.pageSize,
+  );
 }
 
 export async function listSellerListingCards(
   sellerId: string,
-  status: ListingStatus,
+  input?: { status?: string; page?: string; pageSize?: string },
   database?: Database,
-) {
+): Promise<PaginatedListingCardResult> {
   const resolvedDatabase = await resolveDatabase(database);
+  const query = normalizeDashboardListingsQuery(input);
+  const whereClause = and(
+    eq(listing.sellerId, sellerId),
+    eq(listing.status, query.status),
+  );
+  const [{ totalCount }] = await resolvedDatabase
+    .select({
+      totalCount: sql<number>`count(*)`,
+    })
+    .from(listing)
+    .where(whereClause);
 
-  return resolvedDatabase
+  const items = await resolvedDatabase
     .select(listingCardSelection)
     .from(listing)
     .innerJoin(user, eq(listing.sellerId, user.id))
@@ -202,8 +240,17 @@ export async function listSellerListingCards(
         eq(listingImage.isMain, true),
       ),
     )
-    .where(and(eq(listing.sellerId, sellerId), eq(listing.status, status)))
-    .orderBy(desc(listing.updatedAt));
+    .where(whereClause)
+    .orderBy(desc(listing.updatedAt))
+    .limit(query.pageSize)
+    .offset((query.page - 1) * query.pageSize);
+
+  return createPaginatedListingCardResult(
+    items,
+    totalCount,
+    query.page,
+    query.pageSize,
+  );
 }
 
 export async function getListingDetail(

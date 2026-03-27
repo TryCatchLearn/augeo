@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDashboardListingsSearchParams,
+  createPublicListingsSearchParams,
+  formatResultCount,
   getListingCategoryLabel,
+  getPaginationWindow,
   getPublicListingPriceThresholdCents,
+  normalizeDashboardListingsQuery,
   normalizePublicListingsQuery,
   publicListingSortOptions,
 } from "@/features/listings/browse";
@@ -51,6 +56,20 @@ describe("public listings browse contract", () => {
     });
   });
 
+  it("normalizes invalid dashboard values to the seller defaults", () => {
+    expect(
+      normalizeDashboardListingsQuery({
+        status: "mystery",
+        page: "-4",
+        pageSize: "999",
+      }),
+    ).toEqual({
+      status: "draft",
+      page: 1,
+      pageSize: 6,
+    });
+  });
+
   it("maps listing categories to user-facing labels", () => {
     expect(getListingCategoryLabel("home_garden")).toBe("Home & Garden");
     expect(getListingCategoryLabel("jewelry_watches")).toBe(
@@ -70,5 +89,44 @@ describe("public listings browse contract", () => {
       value: "most_bids",
       label: "Most Bids",
     });
+  });
+
+  it("builds a centered pagination window for the current page", () => {
+    expect(getPaginationWindow(4, 8)).toEqual({
+      pageCount: 8,
+      pageNumbers: [2, 3, 4, 5, 6],
+    });
+    expect(getPaginationWindow(8, 8)).toEqual({
+      pageCount: 8,
+      pageNumbers: [4, 5, 6, 7, 8],
+    });
+  });
+
+  it("formats result counts for empty and partial pages", () => {
+    expect(formatResultCount(1, 6, 0, 0)).toBe("0-0 of 0");
+    expect(formatResultCount(2, 6, 3, 9)).toBe("7-9 of 9");
+  });
+
+  it("serializes public and dashboard search params using the shared defaults", () => {
+    expect(
+      createPublicListingsSearchParams({
+        status: "scheduled",
+        q: "desk lamp",
+        category: "electronics",
+        price: "lt_50",
+        sort: "price_desc",
+        page: 2,
+        pageSize: 12,
+      }).toString(),
+    ).toBe(
+      "status=scheduled&q=desk+lamp&category=electronics&price=lt_50&sort=price_desc&page=2&pageSize=12",
+    );
+    expect(
+      createDashboardListingsSearchParams({
+        status: "active",
+        page: 1,
+        pageSize: 24,
+      }).toString(),
+    ).toBe("status=active&pageSize=24");
   });
 });

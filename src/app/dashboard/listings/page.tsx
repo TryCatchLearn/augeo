@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { requireSession } from "@/features/auth/session";
-import { ListingCardGrid } from "@/features/listings/components/listing-card-grid";
 import {
-  isListingStatus,
+  createDashboardListingsSearchParams,
+  normalizeDashboardListingsQuery,
+} from "@/features/listings/browse";
+import { ListingCardGrid } from "@/features/listings/components/listing-card-grid";
+import { ListingsPagination } from "@/features/listings/components/listings-pagination";
+import {
   type ListingStatus,
   listingStatuses,
 } from "@/features/listings/domain";
@@ -12,12 +16,10 @@ import { cn } from "@/lib/utils";
 type DashboardListingsPageProps = {
   searchParams?: Promise<{
     status?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 };
-
-function getSelectedStatus(status: string | undefined): ListingStatus {
-  return status && isListingStatus(status) ? status : "draft";
-}
 
 const dashboardTabLabels: Record<ListingStatus, string> = {
   draft: "Drafts",
@@ -31,10 +33,10 @@ export default async function DashboardListingsPage({
 }: DashboardListingsPageProps) {
   const session = await requireSession("/dashboard/listings");
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const selectedStatus = getSelectedStatus(resolvedSearchParams?.status);
+  const query = normalizeDashboardListingsQuery(resolvedSearchParams);
   const listings = await listSellerListingCards(
     session.user.id,
-    selectedStatus,
+    resolvedSearchParams,
   );
 
   return (
@@ -57,12 +59,22 @@ export default async function DashboardListingsPage({
         className="mt-10 flex flex-wrap gap-3 rounded-3xl border border-border/80 bg-muted/15 p-3"
       >
         {listingStatuses.map((status) => {
-          const isActive = selectedStatus === status;
+          const isActive = query.status === status;
+          const nextSearchParams = createDashboardListingsSearchParams({
+            ...query,
+            status,
+            page: 1,
+          });
+          const queryString = nextSearchParams.toString();
 
           return (
             <Link
               key={status}
-              href={`/dashboard/listings?status=${status}`}
+              href={
+                queryString.length > 0
+                  ? `/dashboard/listings?${queryString}`
+                  : "/dashboard/listings"
+              }
               className={cn(
                 "rounded-full px-4 py-2 text-sm font-medium transition-colors",
                 isActive
@@ -78,8 +90,14 @@ export default async function DashboardListingsPage({
       </nav>
 
       <div className="mt-8">
-        <ListingCardGrid listings={listings} />
+        <ListingCardGrid listings={listings.items} />
       </div>
+
+      <ListingsPagination
+        pathname="/dashboard/listings"
+        searchParams={createDashboardListingsSearchParams(query)}
+        pagination={listings}
+      />
     </section>
   );
 }

@@ -43,6 +43,28 @@ export type PublicListingsQuery = {
   pageSize: ListingPageSize;
 };
 
+export type DashboardListingsQueryInput = {
+  status?: string;
+  page?: string;
+  pageSize?: string;
+};
+
+export type DashboardListingsQuery = {
+  status: "draft" | "active" | "scheduled" | "ended";
+  page: number;
+  pageSize: ListingPageSize;
+};
+
+export type PaginationWindow = {
+  pageCount: number;
+  pageNumbers: number[];
+};
+
+export type ResultCountRange = {
+  start: number;
+  end: number;
+};
+
 const listingCategoryLabels: Record<ListingCategory, string> = {
   electronics: "Electronics",
   fashion: "Fashion",
@@ -154,4 +176,140 @@ export function normalizePublicListingsQuery(
     page,
     pageSize,
   };
+}
+
+export function normalizeDashboardListingsQuery(
+  input?: DashboardListingsQueryInput,
+): DashboardListingsQuery {
+  const trimmedStatus = input?.status?.trim();
+  const status =
+    trimmedStatus === "draft" ||
+    trimmedStatus === "active" ||
+    trimmedStatus === "scheduled" ||
+    trimmedStatus === "ended"
+      ? trimmedStatus
+      : "draft";
+  const page = normalizePositiveInteger(input?.page, 1);
+  const requestedPageSize = normalizePositiveInteger(input?.pageSize, 6);
+  const pageSize = listingPageSizes.includes(
+    requestedPageSize as ListingPageSize,
+  )
+    ? (requestedPageSize as ListingPageSize)
+    : 6;
+
+  return {
+    status,
+    page,
+    pageSize,
+  };
+}
+
+export function createPublicListingsSearchParams(query: PublicListingsQuery) {
+  const searchParams = new URLSearchParams();
+
+  searchParams.set("status", query.status);
+
+  if (query.q.length > 0) {
+    searchParams.set("q", query.q);
+  }
+
+  if (query.category) {
+    searchParams.set("category", query.category);
+  }
+
+  if (query.price) {
+    searchParams.set("price", query.price);
+  }
+
+  if (query.sort !== "newest") {
+    searchParams.set("sort", query.sort);
+  }
+
+  if (query.page !== 1) {
+    searchParams.set("page", String(query.page));
+  }
+
+  if (query.pageSize !== 6) {
+    searchParams.set("pageSize", String(query.pageSize));
+  }
+
+  return searchParams;
+}
+
+export function createDashboardListingsSearchParams(
+  query: DashboardListingsQuery,
+) {
+  const searchParams = new URLSearchParams();
+
+  searchParams.set("status", query.status);
+
+  if (query.page !== 1) {
+    searchParams.set("page", String(query.page));
+  }
+
+  if (query.pageSize !== 6) {
+    searchParams.set("pageSize", String(query.pageSize));
+  }
+
+  return searchParams;
+}
+
+export function getPaginationWindow(
+  page: number,
+  pageCount: number,
+  windowSize = 5,
+): PaginationWindow {
+  if (pageCount <= 0) {
+    return {
+      pageCount: 0,
+      pageNumbers: [],
+    };
+  }
+
+  const currentPage = Math.min(Math.max(page, 1), pageCount);
+  const boundedWindowSize = Math.max(windowSize, 1);
+  const halfWindow = Math.floor(boundedWindowSize / 2);
+  let startPage = Math.max(1, currentPage - halfWindow);
+  const endPage = Math.min(pageCount, startPage + boundedWindowSize - 1);
+
+  startPage = Math.max(1, endPage - boundedWindowSize + 1);
+
+  return {
+    pageCount,
+    pageNumbers: Array.from(
+      { length: endPage - startPage + 1 },
+      (_, index) => startPage + index,
+    ),
+  };
+}
+
+export function getResultCountRange(
+  page: number,
+  pageSize: number,
+  itemCount: number,
+): ResultCountRange {
+  if (itemCount === 0) {
+    return {
+      start: 0,
+      end: 0,
+    };
+  }
+
+  const start = (page - 1) * pageSize + 1;
+
+  return {
+    start,
+    end: start + itemCount - 1,
+  };
+}
+
+export function formatResultCount(
+  page: number,
+  pageSize: number,
+  itemCount: number,
+  totalCount: number,
+) {
+  const { start, end } = getResultCountRange(page, pageSize, itemCount);
+
+  return `${start}-${end} of ${totalCount}`;
 }

@@ -462,9 +462,9 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [x] Seed data plan finalized
 - [x] Browse query contract finalized
 - [x] Search/filter/sort contract finalized
-- [ ] Shared pagination contract finalized
-- [ ] Unit tests completed
-- [ ] Integration tests completed
+- [x] Shared pagination contract finalized
+- [x] Unit tests completed
+- [x] Integration tests completed
 - [ ] 80%+ coverage met
 - [ ] Phase accepted
 
