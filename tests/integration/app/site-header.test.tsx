@@ -96,7 +96,7 @@ describe("SiteHeader", () => {
     );
 
     expect(hoisted.push).toHaveBeenCalledWith(
-      "/listings?status=scheduled&category=electronics&price=lt_50&sort=price_desc&pageSize=12&q=desk+lamp",
+      "/listings?status=scheduled&q=desk+lamp&category=electronics&price=lt_50&sort=price_desc&pageSize=12",
     );
   });
 

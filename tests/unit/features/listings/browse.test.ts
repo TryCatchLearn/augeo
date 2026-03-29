@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  createDashboardListingsSearchParams,
-  createPublicListingsSearchParams,
-  formatResultCount,
-  getListingCategoryLabel,
-  getPaginationWindow,
   getPublicListingPriceThresholdCents,
+  publicListingSortOptions,
+} from "@/features/listings/helpers/browse-options";
+import {
   normalizeDashboardListingsQuery,
   normalizePublicListingsQuery,
-  publicListingSortOptions,
-} from "@/features/listings/browse";
+} from "@/features/listings/helpers/browse-query";
+import {
+  createDashboardListingsSearchParams,
+  createPublicListingsSearchParams,
+} from "@/features/listings/helpers/browse-search-params";
+import {
+  getPaginationWindow,
+  getResultCountRange,
+} from "@/features/listings/helpers/pagination";
 
 describe("public listings browse contract", () => {
   it("normalizes invalid values to the public defaults", () => {
@@ -70,25 +75,18 @@ describe("public listings browse contract", () => {
     });
   });
 
-  it("maps listing categories to user-facing labels", () => {
-    expect(getListingCategoryLabel("home_garden")).toBe("Home & Garden");
-    expect(getListingCategoryLabel("jewelry_watches")).toBe(
-      "Jewelry & Watches",
-    );
-  });
-
   it("maps price filters to starting-bid thresholds in cents", () => {
     expect(getPublicListingPriceThresholdCents("lt_10")).toBe(1_000);
     expect(getPublicListingPriceThresholdCents("lt_500")).toBe(50_000);
   });
 
-  it("keeps the temporary most-bids option in the sort contract", () => {
-    expect(
-      publicListingSortOptions.find((option) => option.value === "most_bids"),
-    ).toEqual({
-      value: "most_bids",
-      label: "Most Bids",
-    });
+  it("keeps only implemented sort options in the sort contract", () => {
+    expect(publicListingSortOptions.map((option) => option.value)).toEqual([
+      "newest",
+      "ending_soonest",
+      "price_asc",
+      "price_desc",
+    ]);
   });
 
   it("builds a centered pagination window for the current page", () => {
@@ -102,9 +100,9 @@ describe("public listings browse contract", () => {
     });
   });
 
-  it("formats result counts for empty and partial pages", () => {
-    expect(formatResultCount(1, 6, 0, 0)).toBe("0-0 of 0");
-    expect(formatResultCount(2, 6, 3, 9)).toBe("7-9 of 9");
+  it("computes result counts for empty and partial pages", () => {
+    expect(getResultCountRange(1, 6, 0)).toEqual({ start: 0, end: 0 });
+    expect(getResultCountRange(2, 6, 3)).toEqual({ start: 7, end: 9 });
   });
 
   it("serializes public and dashboard search params using the shared defaults", () => {

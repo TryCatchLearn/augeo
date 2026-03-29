@@ -3,21 +3,18 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { listing, listingImage, user } from "@/db/schema";
 import {
-  getPaginationWindow,
-  getPublicListingPriceThresholdCents,
-  getResultCountRange,
-  type ListingPageSize,
+  canViewListingDetail,
+  type ListingStatus,
+} from "@/features/listings/domain";
+import { getPublicListingPriceThresholdCents } from "@/features/listings/helpers/browse-options";
+import {
+  type DashboardListingsQueryInput,
   normalizeDashboardListingsQuery,
   normalizePublicListingsQuery,
   type PublicListingSort,
   type PublicListingsQueryInput,
-} from "@/features/listings/browse";
-import {
-  canViewListingDetail,
-  type ListingStatus,
-} from "@/features/listings/domain";
-
-export * from "@/features/listings/browse";
+} from "@/features/listings/helpers/browse-query";
+import type { PaginatedResult } from "@/features/listings/helpers/pagination";
 
 export type ListingCardData = {
   id: string;
@@ -67,19 +64,7 @@ export type ListingImageAssetRecord = {
 };
 
 type Database = LibSQLDatabase<typeof schema>;
-
-export type PaginatedListingCardResult = {
-  items: ListingCardData[];
-  totalCount: number;
-  page: number;
-  pageSize: ListingPageSize;
-  startResult: number;
-  endResult: number;
-  pageCount: number;
-  pageNumbers: number[];
-  hasPreviousPage: boolean;
-  hasNextPage: boolean;
-};
+type WhereClause = NonNullable<ReturnType<typeof and>>;
 
 async function resolveDatabase(database?: Database) {
   if (database) {
@@ -102,6 +87,19 @@ const listingCardSelection = {
   imageUrl: listingImage.url,
 };
 
+function getPublicListingOrderBy(sort: PublicListingSort) {
+  switch (sort) {
+    case "ending_soonest":
+      return [asc(listing.endsAt), desc(listing.createdAt)] as const;
+    case "price_asc":
+      return [asc(listing.startingBidCents), desc(listing.createdAt)] as const;
+    case "price_desc":
+      return [desc(listing.startingBidCents), desc(listing.createdAt)] as const;
+    case "newest":
+      return [desc(listing.createdAt)] as const;
+  }
+}
+
 function buildPublicListingWhereClause(
   query: ReturnType<typeof normalizePublicListingsQuery>,
 ) {
@@ -109,14 +107,12 @@ function buildPublicListingWhereClause(
 
   if (query.q.length > 0) {
     const searchValue = `%${query.q.toLowerCase()}%`;
-    const searchCondition = or(
-      like(sql`lower(${listing.title})`, searchValue),
-      like(sql`lower(${listing.description})`, searchValue),
+    conditions.push(
+      or(
+        like(sql`lower(${listing.title})`, searchValue),
+        like(sql`lower(${listing.description})`, searchValue),
+      ) ?? like(sql`lower(${listing.title})`, searchValue),
     );
-
-    if (searchCondition) {
-      conditions.push(searchCondition);
-    }
   }
 
   if (query.category) {
@@ -132,128 +128,82 @@ function buildPublicListingWhereClause(
     );
   }
 
-  return and(...conditions);
+  return and(...conditions) ?? eq(listing.status, query.status);
 }
 
-function getPublicListingOrderBy(sort: PublicListingSort) {
-  switch (sort) {
-    case "ending_soonest":
-      return [asc(listing.endsAt), desc(listing.createdAt)] as const;
-    case "price_asc":
-      return [asc(listing.startingBidCents), desc(listing.createdAt)] as const;
-    case "price_desc":
-      return [desc(listing.startingBidCents), desc(listing.createdAt)] as const;
-    case "most_bids":
-    case "newest":
-      return [desc(listing.createdAt)] as const;
-  }
+async function countListings(database: Database, whereClause: WhereClause) {
+  const [{ totalCount }] = await database
+    .select({
+      totalCount: sql<number>`count(*)`,
+    })
+    .from(listing)
+    .where(whereClause);
+
+  return totalCount;
 }
 
-function createPaginatedListingCardResult(
-  items: ListingCardData[],
-  totalCount: number,
-  page: number,
-  pageSize: ListingPageSize,
-): PaginatedListingCardResult {
-  const pageCount = totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize);
-  const { pageNumbers } = getPaginationWindow(page, pageCount);
-  const { start, end } = getResultCountRange(page, pageSize, items.length);
-
-  return {
-    items,
-    totalCount,
-    page,
-    pageSize,
-    startResult: start,
-    endResult: end,
-    pageCount,
-    pageNumbers,
-    hasPreviousPage: page > 1,
-    hasNextPage: page * pageSize < totalCount,
-  };
+function selectListingCards(database: Database) {
+  return database
+    .select(listingCardSelection)
+    .from(listing)
+    .innerJoin(user, eq(listing.sellerId, user.id))
+    .leftJoin(
+      listingImage,
+      and(
+        eq(listingImage.listingId, listing.id),
+        eq(listingImage.isMain, true),
+      ),
+    );
 }
 
 export async function listPublicListingCards(
   input?: PublicListingsQueryInput,
   database?: Database,
-): Promise<PaginatedListingCardResult> {
+): Promise<PaginatedResult<ListingCardData>> {
   const resolvedDatabase = await resolveDatabase(database);
   const query = normalizePublicListingsQuery(input);
   const whereClause = buildPublicListingWhereClause(query);
-  const [{ totalCount }] = await resolvedDatabase
-    .select({
-      totalCount: sql<number>`count(*)`,
-    })
-    .from(listing)
-    .where(whereClause);
-
-  const items = await resolvedDatabase
-    .select(listingCardSelection)
-    .from(listing)
-    .innerJoin(user, eq(listing.sellerId, user.id))
-    .leftJoin(
-      listingImage,
-      and(
-        eq(listingImage.listingId, listing.id),
-        eq(listingImage.isMain, true),
-      ),
-    )
+  const totalCount = await countListings(resolvedDatabase, whereClause);
+  const items = await selectListingCards(resolvedDatabase)
     .where(whereClause)
     .orderBy(...getPublicListingOrderBy(query.sort))
     .limit(query.pageSize)
     .offset((query.page - 1) * query.pageSize);
 
-  return createPaginatedListingCardResult(
+  return {
     items,
     totalCount,
-    query.page,
-    query.pageSize,
-  );
+    page: query.page,
+    pageSize: query.pageSize,
+  };
 }
 
 export async function listSellerListingCards(
   sellerId: string,
-  input?: { status?: string; page?: string; pageSize?: string },
+  input?: DashboardListingsQueryInput,
   database?: Database,
-): Promise<PaginatedListingCardResult> {
+): Promise<PaginatedResult<ListingCardData>> {
   const resolvedDatabase = await resolveDatabase(database);
   const query = normalizeDashboardListingsQuery(input);
-  const whereClause = and(
-    eq(listing.sellerId, sellerId),
-    eq(listing.status, query.status),
-  );
-  const [{ totalCount }] = await resolvedDatabase
-    .select({
-      totalCount: sql<number>`count(*)`,
-    })
-    .from(listing)
-    .where(whereClause);
-
-  const items = await resolvedDatabase
-    .select(listingCardSelection)
-    .from(listing)
-    .innerJoin(user, eq(listing.sellerId, user.id))
-    .leftJoin(
-      listingImage,
-      and(
-        eq(listingImage.listingId, listing.id),
-        eq(listingImage.isMain, true),
-      ),
-    )
+  const whereClause =
+    and(eq(listing.sellerId, sellerId), eq(listing.status, query.status)) ??
+    eq(listing.sellerId, sellerId);
+  const totalCount = await countListings(resolvedDatabase, whereClause);
+  const items = await selectListingCards(resolvedDatabase)
     .where(whereClause)
     .orderBy(desc(listing.updatedAt))
     .limit(query.pageSize)
     .offset((query.page - 1) * query.pageSize);
 
-  return createPaginatedListingCardResult(
+  return {
     items,
     totalCount,
-    query.page,
-    query.pageSize,
-  );
+    page: query.page,
+    pageSize: query.pageSize,
+  };
 }
 
-export async function getListingDetail(
+async function getListingDetail(
   listingId: string,
   database?: Database,
 ): Promise<ListingDetailData | null> {
@@ -290,21 +240,15 @@ export async function getListingDetail(
     return null;
   }
 
+  const {
+    imageId: _imageId,
+    imageUrl: _imageUrl,
+    imageIsMain: _imageIsMain,
+    ...listingDetail
+  } = firstResult;
+
   return {
-    id: firstResult.id,
-    sellerId: firstResult.sellerId,
-    sellerName: firstResult.sellerName,
-    title: firstResult.title,
-    description: firstResult.description,
-    location: firstResult.location,
-    category: firstResult.category,
-    condition: firstResult.condition,
-    status: firstResult.status,
-    startingBidCents: firstResult.startingBidCents,
-    reservePriceCents: firstResult.reservePriceCents,
-    aiDescriptionGenerationCount: firstResult.aiDescriptionGenerationCount,
-    startsAt: firstResult.startsAt,
-    endsAt: firstResult.endsAt,
+    ...listingDetail,
     images: results.flatMap((result) => {
       if (!result.imageId || !result.imageUrl) {
         return [];

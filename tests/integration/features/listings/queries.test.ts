@@ -3,12 +3,11 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { listing, listingImage, user } from "@/db/schema";
+import { normalizePublicListingsQuery } from "@/features/listings/helpers/browse-query";
 import {
-  getListingDetail,
   getListingDetailForViewer,
   listPublicListingCards,
   listSellerListingCards,
-  normalizePublicListingsQuery,
 } from "@/features/listings/queries";
 import {
   createTestDatabase,
@@ -115,12 +114,6 @@ describe("listing queries", () => {
     expect(listings).toMatchObject({
       page: 1,
       pageSize: 6,
-      startResult: 1,
-      endResult: 1,
-      pageCount: 1,
-      pageNumbers: [1],
-      hasPreviousPage: false,
-      hasNextPage: false,
     });
   });
 
@@ -423,7 +416,7 @@ describe("listing queries", () => {
     expect(listings.items.map((item) => item.startingBidCents)).toEqual([4500]);
   });
 
-  it("sorts public listings by newest by default and for most bids", async () => {
+  it("sorts public listings by newest", async () => {
     const sellerId = randomUUID();
 
     await testDatabase.db.insert(user).values({
@@ -472,16 +465,8 @@ describe("listing queries", () => {
       { status: "active", sort: "newest" },
       testDatabase.db,
     );
-    const mostBids = await listPublicListingCards(
-      { status: "active", sort: "most_bids" },
-      testDatabase.db,
-    );
 
     expect(newest.items.map((item) => item.title)).toEqual([
-      "Later Listing",
-      "Earlier Listing",
-    ]);
-    expect(mostBids.items.map((item) => item.title)).toEqual([
       "Later Listing",
       "Earlier Listing",
     ]);
@@ -684,12 +669,6 @@ describe("listing queries", () => {
       totalCount: 1,
       page: 1,
       pageSize: 6,
-      startResult: 1,
-      endResult: 1,
-      pageCount: 1,
-      pageNumbers: [1],
-      hasPreviousPage: false,
-      hasNextPage: false,
     });
   });
 
@@ -795,7 +774,7 @@ describe("listing queries", () => {
 
   it("returns null when the listing does not exist", async () => {
     await expect(
-      getListingDetail(randomUUID(), testDatabase.db),
+      getListingDetailForViewer(randomUUID(), null, testDatabase.db),
     ).resolves.toBeNull();
   });
 });

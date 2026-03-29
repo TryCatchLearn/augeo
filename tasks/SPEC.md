@@ -255,7 +255,7 @@ Every phase follows the same lifecycle:
 - [x] Phase 0 - Testing/foundation setup
 - [x] Phase 1 - Listing Creation and Management
 - [ ] Phase 2 - AI Features
-- [ ] Phase 3 - Browse and Search Listings
+- [x] Phase 3 - Browse and Search Listings
 - [ ] Phase 4 - Bidding and Real-Time Updates
 - [ ] Phase 5 - Auction Finalization and Notifications
 - [ ] Phase 6 - User Dashboard
@@ -421,6 +421,8 @@ Status: Approved on 2026-03-27. Implementation completed; acceptance still pendi
 
 Objective: improve public browse discovery and seller listing navigation with richer seed data, explicit navbar search, filter/sort controls, and shared pagination.
 
+Status: Accepted on 2026-03-29
+
 Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
 ### Sub-Phases
@@ -437,7 +439,7 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - Navbar search is always visible and submits only on Enter or search-button click.
 - Search uses simple case-insensitive contains matching on listing title and description.
 - Phase 3 price filtering and sorting use `startingBidCents`.
-- `Most Bids` remains visible in the UI/query contract, but temporarily resolves to the same ordering as `Newest` until Phase 4 adds real bid data.
+- Phase 3 ships only implemented public sorts: `newest`, `ending_soonest`, `price_asc`, and `price_desc`.
 - `/dashboard/listings` keeps its existing seller status tabs and adopts shared pagination only.
 - Pagination is shared, offset-based, and URL-driven through `page` and `pageSize`.
 
@@ -465,8 +467,9 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [x] Shared pagination contract finalized
 - [x] Unit tests completed
 - [x] Integration tests completed
-- [ ] 80%+ coverage met
-- [ ] Phase accepted
+- [x] Implementation verification run (`npm run test:run`, `npm run lint`, `npm run build`, `npx tsc --noEmit`)
+- [x] 80%+ coverage met
+- [x] Phase accepted
 
 ## Phase 4 - Bidding and Real-Time Updates
 

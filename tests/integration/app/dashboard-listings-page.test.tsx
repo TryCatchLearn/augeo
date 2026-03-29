@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PaginatedListingCardResult } from "@/features/listings/queries";
+import type { PaginatedResult } from "@/features/listings/helpers/pagination";
+import type { ListingCardData } from "@/features/listings/queries";
 import { createMockSession } from "../../helpers/auth/session";
+import {
+  createListingCardData,
+  createPaginatedResult,
+} from "../../helpers/listings";
 
 const mockRequireSession = vi.fn();
 const mockListSellerListingCards =
@@ -9,7 +14,7 @@ const mockListSellerListingCards =
     (
       sellerId: string,
       input?: { status?: string; page?: string; pageSize?: string },
-    ) => Promise<PaginatedListingCardResult>
+    ) => Promise<PaginatedResult<ListingCardData>>
   >();
 const mockListingsPagination = vi.fn();
 
@@ -28,23 +33,6 @@ vi.mock("@/features/listings/components/listings-pagination", () => ({
     return <div data-testid="listings-pagination" />;
   },
 }));
-
-function createListingsResult(
-  items: PaginatedListingCardResult["items"],
-): PaginatedListingCardResult {
-  return {
-    items,
-    totalCount: items.length,
-    page: 1,
-    pageSize: 6,
-    startResult: items.length > 0 ? 1 : 0,
-    endResult: items.length,
-    pageCount: items.length > 0 ? 1 : 0,
-    pageNumbers: items.length > 0 ? [1] : [],
-    hasPreviousPage: false,
-    hasNextPage: false,
-  };
-}
 
 describe("Dashboard listings page", () => {
   beforeEach(() => {
@@ -69,17 +57,13 @@ describe("Dashboard listings page", () => {
 
     mockRequireSession.mockResolvedValue(session);
     mockListSellerListingCards.mockResolvedValue(
-      createListingsResult([
-        {
-          id: "listing-1",
+      createPaginatedResult([
+        createListingCardData({
           title: "Seller Active",
-          status: "active",
-          startingBidCents: 42000,
-          bidCount: 0,
+          startingBidCents: 42_000,
           sellerName: session.user.name,
-          endsAt: new Date("2026-03-22T18:00:00.000Z"),
           imageUrl: "https://picsum.photos/seed/seller-active/1200/900",
-        },
+        }),
       ]),
     );
 
@@ -107,7 +91,7 @@ describe("Dashboard listings page", () => {
 
   it("shows an empty state when the selected tab has no listings", async () => {
     mockRequireSession.mockResolvedValue(createMockSession());
-    mockListSellerListingCards.mockResolvedValue(createListingsResult([]));
+    mockListSellerListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: DashboardListingsPage } = await import(
       "@/app/dashboard/listings/page"
@@ -131,7 +115,7 @@ describe("Dashboard listings page", () => {
     const session = createMockSession();
 
     mockRequireSession.mockResolvedValue(session);
-    mockListSellerListingCards.mockResolvedValue(createListingsResult([]));
+    mockListSellerListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: DashboardListingsPage } = await import(
       "@/app/dashboard/listings/page"
@@ -156,7 +140,7 @@ describe("Dashboard listings page", () => {
     const session = createMockSession();
 
     mockRequireSession.mockResolvedValue(session);
-    mockListSellerListingCards.mockResolvedValue(createListingsResult([]));
+    mockListSellerListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: DashboardListingsPage } = await import(
       "@/app/dashboard/listings/page"

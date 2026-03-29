@@ -11,24 +11,75 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { ListingCategory } from "@/features/listings/domain";
 import {
-  createPublicListingsSearchParams,
-  type PublicListingPriceFilter,
-  type PublicListingSort,
-  type PublicListingsQuery,
   publicListingCategoryOptions,
   publicListingPriceOptions,
   publicListingSortOptions,
-} from "@/features/listings/browse";
-import type { ListingCategory } from "@/features/listings/domain";
+} from "@/features/listings/helpers/browse-options";
+import type {
+  PublicListingPriceFilter,
+  PublicListingSort,
+  PublicListingsQuery,
+} from "@/features/listings/helpers/browse-query";
+import { createPublicListingsSearchParams } from "@/features/listings/helpers/browse-search-params";
 
 type PublicListingsControlsProps = {
   query: PublicListingsQuery;
 };
 
+type ControlOption = {
+  value: string;
+  label: string;
+};
+
+type ControlConfig = {
+  label: string;
+  items: readonly ControlOption[];
+  value: string;
+  className: string;
+  onValueChange: (value: string | null) => void;
+};
+
 export function PublicListingsControls({ query }: PublicListingsControlsProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const controls: ControlConfig[] = [
+    {
+      label: "Category",
+      items: publicListingCategoryOptions,
+      value: query.category ?? "all",
+      className: "w-auto min-w-44",
+      onValueChange: (value: string | null) =>
+        pushNextUrl({
+          category:
+            !value || value === "all" ? null : (value as ListingCategory),
+        }),
+    },
+    {
+      label: "Price",
+      items: publicListingPriceOptions,
+      value: query.price ?? "any",
+      className: "w-auto min-w-36",
+      onValueChange: (value: string | null) =>
+        pushNextUrl({
+          price:
+            !value || value === "any"
+              ? null
+              : (value as PublicListingPriceFilter),
+        }),
+    },
+    {
+      label: "Sort",
+      items: publicListingSortOptions,
+      value: query.sort,
+      className: "w-auto min-w-40",
+      onValueChange: (value: string | null) =>
+        pushNextUrl({
+          sort: (value ?? "newest") as PublicListingSort,
+        }),
+    },
+  ] as const;
 
   function pushNextUrl(
     updates: Partial<Pick<PublicListingsQuery, "category" | "price" | "sort">>,
@@ -48,71 +99,29 @@ export function PublicListingsControls({ query }: PublicListingsControlsProps) {
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
-      <Select
-        items={publicListingCategoryOptions}
-        value={query.category ?? "all"}
-        onValueChange={(value) =>
-          pushNextUrl({
-            category: value === "all" ? null : (value as ListingCategory),
-          })
-        }
-      >
-        <SelectTrigger aria-label="Category" className="w-auto min-w-44">
-          <SelectValue />
-          <SelectIcon />
-        </SelectTrigger>
-        <SelectContent>
-          {publicListingCategoryOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select
-        items={publicListingPriceOptions}
-        value={query.price ?? "any"}
-        onValueChange={(value) =>
-          pushNextUrl({
-            price: value === "any" ? null : (value as PublicListingPriceFilter),
-          })
-        }
-      >
-        <SelectTrigger aria-label="Price" className="w-auto min-w-36">
-          <SelectValue />
-          <SelectIcon />
-        </SelectTrigger>
-        <SelectContent>
-          {publicListingPriceOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select
-        items={publicListingSortOptions}
-        value={query.sort}
-        onValueChange={(value) =>
-          pushNextUrl({
-            sort: value as PublicListingSort,
-          })
-        }
-      >
-        <SelectTrigger aria-label="Sort" className="w-auto min-w-40">
-          <SelectValue />
-          <SelectIcon />
-        </SelectTrigger>
-        <SelectContent>
-          {publicListingSortOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {controls.map((control) => (
+        <Select
+          key={control.label}
+          items={control.items}
+          value={control.value}
+          onValueChange={control.onValueChange}
+        >
+          <SelectTrigger
+            aria-label={control.label}
+            className={control.className}
+          >
+            <SelectValue />
+            <SelectIcon />
+          </SelectTrigger>
+          <SelectContent>
+            {control.items.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ))}
 
       <Button
         type="button"

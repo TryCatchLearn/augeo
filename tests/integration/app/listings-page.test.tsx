@@ -1,40 +1,19 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  ListingCardData,
-  PaginatedListingCardResult,
-} from "@/features/listings/queries";
+import type { PaginatedResult } from "@/features/listings/helpers/pagination";
+import type { ListingCardData } from "@/features/listings/queries";
+import {
+  createListingCardData,
+  createPaginatedResult,
+} from "../../helpers/listings";
 
 const mockListPublicListingCards =
-  vi.fn<() => Promise<PaginatedListingCardResult>>();
+  vi.fn<() => Promise<PaginatedResult<ListingCardData>>>();
 const mockPublicListingsControls = vi.fn();
 const mockListingsPagination = vi.fn();
 
 vi.mock("@/features/listings/queries", () => ({
   listPublicListingCards: mockListPublicListingCards,
-  normalizePublicListingsQuery: vi.fn(
-    (
-      input:
-        | {
-            status?: string;
-            q?: string;
-            category?: string;
-            price?: string;
-            sort?: string;
-            page?: string;
-            pageSize?: string;
-          }
-        | undefined,
-    ) => ({
-      status: input?.status === "scheduled" ? "scheduled" : "active",
-      q: input?.q?.trim() ?? "",
-      category: input?.category === "electronics" ? "electronics" : null,
-      price: input?.price === "lt_50" ? "lt_50" : null,
-      sort: input?.sort === "price_desc" ? "price_desc" : "newest",
-      page: input?.page ? Number(input.page) : 1,
-      pageSize: input?.pageSize ? Number(input.pageSize) : 6,
-    }),
-  ),
 }));
 
 vi.mock("@/features/listings/components/public-listings-controls", () => ({
@@ -53,23 +32,6 @@ vi.mock("@/features/listings/components/listings-pagination", () => ({
   },
 }));
 
-function createListingsResult(
-  items: ListingCardData[],
-): PaginatedListingCardResult {
-  return {
-    items,
-    totalCount: items.length,
-    page: 1,
-    pageSize: 6,
-    startResult: items.length > 0 ? 1 : 0,
-    endResult: items.length,
-    pageCount: items.length > 0 ? 1 : 0,
-    pageNumbers: items.length > 0 ? [1] : [],
-    hasPreviousPage: false,
-    hasNextPage: false,
-  };
-}
-
 describe("Listings page", () => {
   beforeEach(() => {
     mockListPublicListingCards.mockReset();
@@ -79,18 +41,7 @@ describe("Listings page", () => {
 
   it("renders public listing cards that link to listing detail pages", async () => {
     mockListPublicListingCards.mockResolvedValue(
-      createListingsResult([
-        {
-          id: "listing-1",
-          title: "Public Camera",
-          status: "active",
-          startingBidCents: 25000,
-          bidCount: 0,
-          sellerName: "Seller One",
-          endsAt: new Date("2026-03-21T18:00:00.000Z"),
-          imageUrl: "https://picsum.photos/seed/public-camera/1200/900",
-        },
-      ]),
+      createPaginatedResult([createListingCardData()]),
     );
 
     const { default: ListingsPage } = await import("@/app/listings/page");
@@ -105,7 +56,7 @@ describe("Listings page", () => {
   });
 
   it("renders URL-backed public status tabs below the heading", async () => {
-    mockListPublicListingCards.mockResolvedValue(createListingsResult([]));
+    mockListPublicListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: ListingsPage } = await import("@/app/listings/page");
 
@@ -135,7 +86,7 @@ describe("Listings page", () => {
   });
 
   it("falls back to the active tab when the public status is invalid", async () => {
-    mockListPublicListingCards.mockResolvedValue(createListingsResult([]));
+    mockListPublicListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: ListingsPage } = await import("@/app/listings/page");
 
@@ -152,7 +103,7 @@ describe("Listings page", () => {
   });
 
   it("passes the normalized filter and sort query into the controls row", async () => {
-    mockListPublicListingCards.mockResolvedValue(createListingsResult([]));
+    mockListPublicListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: ListingsPage } = await import("@/app/listings/page");
 
@@ -183,7 +134,7 @@ describe("Listings page", () => {
   });
 
   it("passes the shared browse state into pagination links", async () => {
-    mockListPublicListingCards.mockResolvedValue(createListingsResult([]));
+    mockListPublicListingCards.mockResolvedValue(createPaginatedResult([]));
 
     const { default: ListingsPage } = await import("@/app/listings/page");
 
@@ -204,13 +155,13 @@ describe("Listings page", () => {
     const paginationProps = mockListingsPagination.mock.calls.at(-1)?.[0] as {
       pathname: string;
       searchParams: URLSearchParams;
-      pagination: PaginatedListingCardResult;
+      pagination: PaginatedResult<ListingCardData>;
     };
 
     expect(paginationProps.pathname).toBe("/listings");
     expect(paginationProps.searchParams.toString()).toBe(
       "status=scheduled&q=camera&category=electronics&price=lt_50&sort=price_desc&page=2&pageSize=12",
     );
-    expect(paginationProps.pagination).toEqual(createListingsResult([]));
+    expect(paginationProps.pagination).toEqual(createPaginatedResult([]));
   });
 });

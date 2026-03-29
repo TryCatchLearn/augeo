@@ -3,20 +3,29 @@ import Link from "next/link";
 import {
   type ListingPageSize,
   listingPageSizes,
-} from "@/features/listings/browse";
-import type { PaginatedListingCardResult } from "@/features/listings/queries";
+} from "@/features/listings/helpers/browse-query";
+import { buildHref } from "@/features/listings/helpers/browse-search-params";
+import {
+  getPageCount,
+  getPaginationWindow,
+  getResultCountRange,
+  hasNextPage,
+  hasPreviousPage,
+  type PaginatedResult,
+} from "@/features/listings/helpers/pagination";
+import type { ListingCardData } from "@/features/listings/queries";
 import { cn } from "@/lib/utils";
 
 type ListingsPaginationProps = {
   pathname: string;
   searchParams: URLSearchParams;
-  pagination: PaginatedListingCardResult;
+  pagination: PaginatedResult<ListingCardData>;
 };
 
 const paginationLinkClassName =
   "inline-flex h-7 min-w-9 items-center justify-center gap-1 rounded-[min(var(--radius-md),12px)] border px-2.5 text-[0.8rem] font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-function buildHref(
+function buildPaginationHref(
   pathname: string,
   searchParams: URLSearchParams,
   updates: { page?: number; pageSize?: ListingPageSize },
@@ -39,9 +48,7 @@ function buildHref(
     }
   }
 
-  const queryString = nextSearchParams.toString();
-
-  return queryString.length > 0 ? `${pathname}?${queryString}` : pathname;
+  return buildHref(pathname, nextSearchParams);
 }
 
 export function ListingsPagination({
@@ -49,16 +56,12 @@ export function ListingsPagination({
   searchParams,
   pagination,
 }: ListingsPaginationProps) {
-  const {
-    totalCount,
-    page,
-    pageSize,
-    startResult,
-    endResult,
-    pageNumbers,
-    hasPreviousPage,
-    hasNextPage,
-  } = pagination;
+  const { totalCount, page, pageSize, items } = pagination;
+  const pageCount = getPageCount(totalCount, pageSize);
+  const { start, end } = getResultCountRange(page, pageSize, items.length);
+  const { pageNumbers } = getPaginationWindow(page, pageCount);
+  const showPreviousPage = hasPreviousPage(page);
+  const showNextPage = hasNextPage(page, pageSize, totalCount);
 
   return (
     <div
@@ -67,7 +70,7 @@ export function ListingsPagination({
     >
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center">
         <p className="text-sm font-medium text-muted-foreground lg:justify-self-start">
-          {startResult}-{endResult} of {totalCount}
+          {start}-{end} of {totalCount}
         </p>
 
         <nav
@@ -75,12 +78,14 @@ export function ListingsPagination({
           className="flex flex-wrap items-center justify-center gap-2"
         >
           <Link
-            href={buildHref(pathname, searchParams, { page: page - 1 })}
-            aria-disabled={!hasPreviousPage}
+            href={buildPaginationHref(pathname, searchParams, {
+              page: page - 1,
+            })}
+            aria-disabled={!showPreviousPage}
             className={cn(
               paginationLinkClassName,
               "border-border/90 bg-background/55 text-foreground shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-accent)_10%,transparent),inset_0_1px_0_color-mix(in_oklab,white_6%,transparent)] backdrop-blur-sm hover:border-primary/35 hover:bg-muted/80 hover:text-foreground",
-              !hasPreviousPage && "pointer-events-none opacity-50",
+              !showPreviousPage && "pointer-events-none opacity-50",
             )}
           >
             <ChevronLeftIcon />
@@ -93,7 +98,9 @@ export function ListingsPagination({
             return (
               <Link
                 key={pageNumber}
-                href={buildHref(pathname, searchParams, { page: pageNumber })}
+                href={buildPaginationHref(pathname, searchParams, {
+                  page: pageNumber,
+                })}
                 aria-current={isCurrentPage ? "page" : undefined}
                 className={cn(
                   paginationLinkClassName,
@@ -109,12 +116,14 @@ export function ListingsPagination({
           })}
 
           <Link
-            href={buildHref(pathname, searchParams, { page: page + 1 })}
-            aria-disabled={!hasNextPage}
+            href={buildPaginationHref(pathname, searchParams, {
+              page: page + 1,
+            })}
+            aria-disabled={!showNextPage}
             className={cn(
               paginationLinkClassName,
               "border-border/90 bg-background/55 text-foreground shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-accent)_10%,transparent),inset_0_1px_0_color-mix(in_oklab,white_6%,transparent)] backdrop-blur-sm hover:border-primary/35 hover:bg-muted/80 hover:text-foreground",
-              !hasNextPage && "pointer-events-none opacity-50",
+              !showNextPage && "pointer-events-none opacity-50",
             )}
           >
             Next
@@ -129,7 +138,7 @@ export function ListingsPagination({
             return (
               <Link
                 key={nextPageSize}
-                href={buildHref(pathname, searchParams, {
+                href={buildPaginationHref(pathname, searchParams, {
                   page: 1,
                   pageSize: nextPageSize,
                 })}

@@ -1,66 +1,23 @@
-import Link from "next/link";
-import {
-  createPublicListingsSearchParams,
-  publicListingStatuses,
-} from "@/features/listings/browse";
 import { ListingCardGrid } from "@/features/listings/components/listing-card-grid";
 import { ListingsPagination } from "@/features/listings/components/listings-pagination";
+import { PublicListingStatusTabs } from "@/features/listings/components/public-listing-status-tabs";
 import { PublicListingsControls } from "@/features/listings/components/public-listings-controls";
-import { listingStatusLabels } from "@/features/listings/domain";
-import {
-  listPublicListingCards,
-  normalizePublicListingsQuery,
-} from "@/features/listings/queries";
-import { cn } from "@/lib/utils";
+import { normalizePublicListingsQuery } from "@/features/listings/helpers/browse-query";
+import { createPublicListingsSearchParams } from "@/features/listings/helpers/browse-search-params";
+import { getPublicListingsQueryInput } from "@/features/listings/helpers/query-input";
+import { listPublicListingCards } from "@/features/listings/queries";
 
 type ListingsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function getSingleSearchParamValue(
-  value: string | string[] | undefined,
-): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function buildStatusHref(
-  currentQuery: ReturnType<typeof normalizePublicListingsQuery>,
-  searchParams: Record<string, string | string[] | undefined>,
-  status: (typeof publicListingStatuses)[number],
-) {
-  const nextSearchParams = createPublicListingsSearchParams({
-    ...currentQuery,
-    status,
-    page: 1,
-    q: getSingleSearchParamValue(searchParams.q)?.trim() ?? currentQuery.q,
-  });
-  const queryString = nextSearchParams.toString();
-
-  return queryString.length > 0 ? `/listings?${queryString}` : "/listings";
-}
-
 export default async function ListingsPage({
   searchParams,
 }: ListingsPageProps = {}) {
   const resolvedSearchParams = (searchParams ? await searchParams : {}) ?? {};
-  const query = normalizePublicListingsQuery({
-    status: getSingleSearchParamValue(resolvedSearchParams.status),
-    q: getSingleSearchParamValue(resolvedSearchParams.q),
-    category: getSingleSearchParamValue(resolvedSearchParams.category),
-    price: getSingleSearchParamValue(resolvedSearchParams.price),
-    sort: getSingleSearchParamValue(resolvedSearchParams.sort),
-    page: getSingleSearchParamValue(resolvedSearchParams.page),
-    pageSize: getSingleSearchParamValue(resolvedSearchParams.pageSize),
-  });
-  const listings = await listPublicListingCards({
-    status: getSingleSearchParamValue(resolvedSearchParams.status),
-    q: getSingleSearchParamValue(resolvedSearchParams.q),
-    category: getSingleSearchParamValue(resolvedSearchParams.category),
-    price: getSingleSearchParamValue(resolvedSearchParams.price),
-    sort: getSingleSearchParamValue(resolvedSearchParams.sort),
-    page: getSingleSearchParamValue(resolvedSearchParams.page),
-    pageSize: getSingleSearchParamValue(resolvedSearchParams.pageSize),
-  });
+  const queryInput = getPublicListingsQueryInput(resolvedSearchParams);
+  const query = normalizePublicListingsQuery(queryInput);
+  const listings = await listPublicListingCards(queryInput);
 
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-16 sm:py-20">
@@ -74,31 +31,7 @@ export default async function ListingsPage({
       </div>
 
       <div className="mt-10 flex flex-row flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/80 bg-muted/15 p-3">
-        <nav
-          aria-label="Public listing status tabs"
-          className="flex flex-wrap items-center gap-3"
-        >
-          {publicListingStatuses.map((status) => {
-            const isActive = query.status === status;
-
-            return (
-              <Link
-                key={status}
-                href={buildStatusHref(query, resolvedSearchParams, status)}
-                className={cn(
-                  "flex h-8 items-center rounded-lg border border-input/90 bg-input/45 px-3 text-sm font-medium shadow-[inset_0_1px_0_color-mix(in_oklab,white_5%,transparent),0_0_0_1px_color-mix(in_oklab,var(--color-accent)_8%,transparent)] transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                  isActive
-                    ? "border-primary/35 bg-primary/12 text-foreground shadow-[inset_0_1px_0_color-mix(in_oklab,white_8%,transparent),0_0_0_1px_color-mix(in_oklab,var(--color-primary)_16%,transparent)]"
-                    : "text-muted-foreground hover:border-primary/25 hover:bg-muted/80 hover:text-foreground",
-                )}
-                aria-current={isActive ? "page" : undefined}
-              >
-                {listingStatusLabels[status]}
-              </Link>
-            );
-          })}
-        </nav>
-
+        <PublicListingStatusTabs query={query} />
         <PublicListingsControls query={query} />
       </div>
 

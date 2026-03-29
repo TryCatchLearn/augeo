@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { requireSession } from "@/features/auth/session";
-import {
-  createDashboardListingsSearchParams,
-  normalizeDashboardListingsQuery,
-} from "@/features/listings/browse";
 import { ListingCardGrid } from "@/features/listings/components/listing-card-grid";
 import { ListingsPagination } from "@/features/listings/components/listings-pagination";
 import {
   type ListingStatus,
   listingStatuses,
 } from "@/features/listings/domain";
+import { normalizeDashboardListingsQuery } from "@/features/listings/helpers/browse-query";
+import { createDashboardListingsSearchParams } from "@/features/listings/helpers/browse-search-params";
+import { getDashboardListingsQueryInput } from "@/features/listings/helpers/query-input";
 import { listSellerListingCards } from "@/features/listings/queries";
 import { cn } from "@/lib/utils";
 
@@ -33,11 +32,9 @@ export default async function DashboardListingsPage({
 }: DashboardListingsPageProps) {
   const session = await requireSession("/dashboard/listings");
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const query = normalizeDashboardListingsQuery(resolvedSearchParams);
-  const listings = await listSellerListingCards(
-    session.user.id,
-    resolvedSearchParams,
-  );
+  const queryInput = getDashboardListingsQueryInput(resolvedSearchParams);
+  const query = normalizeDashboardListingsQuery(queryInput);
+  const listings = await listSellerListingCards(session.user.id, queryInput);
 
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-16 sm:py-20">
