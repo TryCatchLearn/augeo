@@ -42,6 +42,8 @@ import {
   saveDraftListingSchema,
   validateEnhancedDescription,
 } from "@/features/listings/schema";
+import type { ListingBidPlacedEvent } from "@/features/realtime/events";
+import { publishListingBidPlaced } from "@/server/ably";
 import {
   AiGenerationError,
   generateSmartListingFromImage,
@@ -218,6 +220,27 @@ export async function placeBidAction(input: unknown) {
       ...parsedInput,
       bidderId: session.user.id,
     });
+
+    try {
+      const event: ListingBidPlacedEvent = {
+        listingId: result.listingId,
+        currentBidCents: result.currentBidCents,
+        bidCount: result.bidCount,
+        minimumNextBidCents: result.minimumNextBidCents,
+        highestBidderId: result.highestBidderId,
+        bid: {
+          id: result.bid.id,
+          bidderId: result.bid.bidderId,
+          bidderName: result.bid.bidderName,
+          amountCents: result.bid.amountCents,
+          createdAt: result.bid.createdAt.toISOString(),
+        },
+      };
+
+      await publishListingBidPlaced(event);
+    } catch (error) {
+      console.error("Failed to publish listing bid update.", error);
+    }
 
     revalidateListingPaths(result.listingId);
 

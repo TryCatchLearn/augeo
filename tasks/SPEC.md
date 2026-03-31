@@ -535,7 +535,7 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [x] Realtime event contract finalized
 - [ ] Bid persistence transaction implemented
 - [ ] Listing bid UI implemented
-- [ ] Live update transport implemented
+- [x] Live update transport implemented
 - [ ] Live listing cards implemented
 - [ ] Outbid toast notifications implemented
 - [ ] Unit tests completed

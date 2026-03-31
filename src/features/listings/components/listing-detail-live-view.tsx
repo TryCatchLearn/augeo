@@ -1,0 +1,271 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { StatusBadge } from "@/components/status-badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ListingAuctionActivityPanel } from "@/features/listings/components/listing-auction-activity-panel";
+import { ListingBidForm } from "@/features/listings/components/listing-bid-form";
+import { ListingBidHistory } from "@/features/listings/components/listing-bid-history";
+import { ListingImageGallery } from "@/features/listings/components/listing-image-gallery";
+import { ListingImageUploadPanel } from "@/features/listings/components/listing-image-upload-panel";
+import { ListingSellerControls } from "@/features/listings/components/listing-seller-controls";
+import {
+  getViewerBidStatus,
+  type ViewerBidStatus,
+} from "@/features/listings/domain";
+import type {
+  BidHistoryRow,
+  ListingDetailData,
+} from "@/features/listings/queries";
+import {
+  formatListingPrice,
+  getListingTimeMeta,
+} from "@/features/listings/utils";
+import { useListingBidPlacedSubscription } from "@/features/realtime/provider";
+
+type ListingDetailLiveViewProps = {
+  initialListing: ListingDetailData;
+  viewerId?: string | null;
+};
+
+function hasViewerBid(
+  bidHistory: BidHistoryRow[],
+  viewerId?: string | null,
+  viewerBidStatus?: ViewerBidStatus,
+) {
+  if (!viewerId) {
+    return false;
+  }
+
+  if (viewerBidStatus && viewerBidStatus !== "none") {
+    return true;
+  }
+
+  return bidHistory.some((bid) => bid.bidderId === viewerId);
+}
+
+export function ListingDetailLiveView({
+  initialListing,
+  viewerId,
+}: ListingDetailLiveViewProps) {
+  const [listing, setListing] = useState(initialListing);
+
+  useEffect(() => {
+    setListing(initialListing);
+  }, [initialListing]);
+
+  useListingBidPlacedSubscription(initialListing.id, (event) => {
+    setListing((currentListing) => {
+      const nextBidHistory = [
+        {
+          id: event.bid.id,
+          bidderId: event.bid.bidderId,
+          bidderName: event.bid.bidderName,
+          amountCents: event.bid.amountCents,
+          createdAt: new Date(event.bid.createdAt),
+        },
+        ...currentListing.bidHistory.filter((bid) => bid.id !== event.bid.id),
+      ];
+      const nextViewerBidStatus = getViewerBidStatus({
+        viewerId,
+        highestBidderId: event.highestBidderId,
+        hasViewerBid: hasViewerBid(
+          nextBidHistory,
+          viewerId,
+          currentListing.viewerBidStatus,
+        ),
+      });
+
+      return {
+        ...currentListing,
+        currentBidCents: event.currentBidCents,
+        currentPriceCents: event.currentBidCents,
+        minimumNextBidCents: event.minimumNextBidCents,
+        bidCount: event.bidCount,
+        highestBidderId: event.highestBidderId,
+        viewerBidStatus: nextViewerBidStatus,
+        bidHistory: nextBidHistory,
+      };
+    });
+  });
+
+  const isOwner = viewerId === listing.sellerId;
+  const canManageImages = isOwner && listing.status === "draft";
+  const timeMeta = getListingTimeMeta(
+    listing.status,
+    listing.endsAt,
+    listing.startsAt,
+  );
+  const showSellerControls = isOwner && listing.bidCount === 0;
+  const topCardTitle = isOwner
+    ? showSellerControls
+      ? "Seller Controls"
+      : "Auction Activity"
+    : listing.canPlaceBid
+      ? "Place A Bid"
+      : "Auction Activity";
+  const highestBidderLabel = listing.highestBidderId
+    ? listing.viewerBidStatus === "highest"
+      ? "You"
+      : (listing.bidHistory[0]?.bidderName ?? "Current leader")
+    : "No bids yet";
+  const buyerActivityMessage = viewerId
+    ? listing.status !== "active"
+      ? "Bidding is unavailable because this listing is not currently active."
+      : "You can watch the live auction activity here, but bidding is unavailable for your account on this listing."
+    : "Sign in to place a bid. You can still watch the current auction activity below.";
+
+  return (
+    <section className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
+      <div className="space-y-3">
+        <p className="text-sm font-medium tracking-[0.22em] uppercase text-primary">
+          Listing
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-4xl font-semibold tracking-tight">
+            {listing.title}
+          </h1>
+          <StatusBadge
+            status={listing.status}
+            className="shrink-0 rounded-full border border-white/12 px-6 py-3 text-base font-semibold tracking-[0.22em] uppercase shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_16%,transparent),0_20px_44px_rgba(0,0,0,0.34)] sm:px-7 sm:py-3.5 sm:text-lg"
+          />
+        </div>
+      </div>
+
+      <dl className="mt-8 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-4">
+          <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+            Current Bid
+          </dt>
+          <dd className="mt-2 text-xl font-semibold">
+            {formatListingPrice(listing.currentPriceCents)}
+          </dd>
+        </div>
+        <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-4">
+          <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+            Minimum Bid
+          </dt>
+          <dd className="mt-2 text-xl font-semibold">
+            {formatListingPrice(listing.minimumNextBidCents)}
+          </dd>
+        </div>
+        <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-4">
+          <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+            {timeMeta.label}
+          </dt>
+          <dd className="mt-2 text-xl font-semibold">{timeMeta.value}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
+        <Card className="rounded-[2rem] py-0">
+          <CardContent className="space-y-6 px-6 py-6">
+            <ListingImageGallery
+              listingId={listing.id}
+              canManage={canManageImages}
+              title={listing.title}
+              images={listing.images}
+            />
+
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                  Seller
+                </dt>
+                <dd className="mt-2 text-lg font-semibold">
+                  {listing.sellerName}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                  Location
+                </dt>
+                <dd className="mt-2 text-lg font-semibold">
+                  {listing.location}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                  Category
+                </dt>
+                <dd className="mt-2 text-lg font-semibold">
+                  {listing.category.replaceAll("_", " ")}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
+                <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                  Condition
+                </dt>
+                <dd className="mt-2 text-lg font-semibold">
+                  {listing.condition.replaceAll("_", " ")}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-5">
+              <h2 className="text-sm font-medium tracking-[0.18em] uppercase text-muted-foreground">
+                Description
+              </h2>
+              <p className="mt-3 leading-8 text-muted-foreground">
+                {listing.description}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card className="rounded-[2rem]">
+            <CardHeader className="px-6 pt-6">
+              <CardTitle className="text-xl">{topCardTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 px-6 pb-6">
+              {showSellerControls ? (
+                <ListingSellerControls listing={listing} />
+              ) : isOwner ? (
+                <ListingAuctionActivityPanel
+                  currentPriceCents={listing.currentPriceCents}
+                  minimumNextBidCents={listing.minimumNextBidCents}
+                  bidCount={listing.bidCount}
+                  highestBidderLabel={highestBidderLabel}
+                  message="Bids are live on this listing, so seller controls are now read-only. Review the current auction state and follow bid history below."
+                />
+              ) : listing.canPlaceBid ? (
+                <ListingBidForm
+                  listingId={listing.id}
+                  minimumNextBidCents={listing.minimumNextBidCents}
+                  currentPriceCents={listing.currentPriceCents}
+                  bidCount={listing.bidCount}
+                  viewerBidStatus={listing.viewerBidStatus}
+                />
+              ) : (
+                <ListingAuctionActivityPanel
+                  currentPriceCents={listing.currentPriceCents}
+                  minimumNextBidCents={listing.minimumNextBidCents}
+                  bidCount={listing.bidCount}
+                  highestBidderLabel={highestBidderLabel}
+                  message={buyerActivityMessage}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2rem]">
+            <CardHeader className="px-6 pt-6">
+              <CardTitle className="text-xl">Bid History</CardTitle>
+            </CardHeader>
+            <CardContent className="px-6 pb-6">
+              <ListingBidHistory bids={listing.bidHistory} />
+            </CardContent>
+          </Card>
+
+          {canManageImages ? (
+            <ListingImageUploadPanel
+              listingId={listing.id}
+              imageCount={listing.images.length}
+            />
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}

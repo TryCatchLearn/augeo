@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AppProviders } from "@/components/app-providers";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getSession } from "@/features/auth/session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,23 +21,27 @@ export const metadata: Metadata = {
   description: "A clean, modern auction marketplace for standout listings.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getSession();
+
   return (
     <html lang="en" className="dark">
       <body
         className={`${geistSans.variable} ${geistMono.variable} h-screen overflow-hidden antialiased`}
       >
-        <div className="flex h-screen flex-col bg-background">
-          <SiteHeader />
-          <main className="app-scroll relative z-0 flex min-h-0 flex-1 flex-col overflow-y-auto isolate">
-            <div className="flex-1">{children}</div>
-            <SiteFooter />
-          </main>
-        </div>
+        <AppProviders viewerId={session?.user.id}>
+          <div className="flex h-screen flex-col bg-background">
+            <SiteHeader />
+            <main className="app-scroll relative z-0 flex min-h-0 flex-1 flex-col overflow-y-auto isolate">
+              <div className="flex-1">{children}</div>
+              <SiteFooter />
+            </main>
+          </div>
+        </AppProviders>
       </body>
     </html>
   );

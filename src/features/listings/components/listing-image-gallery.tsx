@@ -2,7 +2,7 @@
 
 import { StarIcon, Trash2Icon } from "lucide-react";
 import Image from "next/image";
-import { startTransition, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import {
   deleteListingImageAction,
@@ -48,20 +48,18 @@ export function ListingImageGallery({
     galleryImages.find((image) => image.id === selectedImageId) ?? initialImage;
 
   const runManagedAction = (action: () => Promise<void>) => {
-    startTransition(async () => {
-      try {
-        setErrorMessage(null);
-        await action();
-      } catch (error) {
+    setErrorMessage(null);
+    void action()
+      .catch((error) => {
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "Unable to update the listing images right now.",
         );
-      } finally {
+      })
+      .finally(() => {
         setPendingImageId(null);
-      }
-    });
+      });
   };
 
   return (

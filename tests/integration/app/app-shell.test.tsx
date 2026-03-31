@@ -30,13 +30,19 @@ vi.mock("@/components/site-footer", () => ({
   SiteFooter: () => <div>Site footer</div>,
 }));
 
+vi.mock("@/components/app-providers", () => ({
+  AppProviders: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
+
+vi.mock("@/features/auth/session", () => ({
+  getSession: vi.fn().mockResolvedValue(null),
+}));
+
 describe("app shell", () => {
-  it("renders the root layout chrome", () => {
-    render(
-      <RootLayout>
-        <div>Page content</div>
-      </RootLayout>,
-    );
+  it("renders the root layout chrome", async () => {
+    render(await RootLayout({ children: <div>Page content</div> }));
 
     expect(screen.getByText("Site header")).toBeInTheDocument();
     expect(screen.getByText("Page content")).toBeInTheDocument();

@@ -13,6 +13,7 @@ import {
 const hoisted = vi.hoisted(() => ({
   requireAuthenticatedSession: vi.fn(),
   revalidatePath: vi.fn(),
+  publishListingBidPlaced: vi.fn(),
   db: null as TestDatabase["db"] | null,
 }));
 
@@ -22,6 +23,10 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/features/auth/session", () => ({
   requireAuthenticatedSession: hoisted.requireAuthenticatedSession,
+}));
+
+vi.mock("@/server/ably", () => ({
+  publishListingBidPlaced: hoisted.publishListingBidPlaced,
 }));
 
 vi.mock("@/db/client", () => ({
@@ -38,6 +43,7 @@ describe("placeBidAction", () => {
     hoisted.db = testDatabase.db;
     hoisted.revalidatePath.mockReset();
     hoisted.requireAuthenticatedSession.mockReset();
+    hoisted.publishListingBidPlaced.mockReset();
   });
 
   afterEach(async () => {
