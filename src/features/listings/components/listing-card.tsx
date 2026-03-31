@@ -1,13 +1,11 @@
-import { BadgeDollarSign, Clock3, Gavel, UserRound } from "lucide-react";
+import { Clock3, UserRound } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { ListingCardLiveStats } from "@/features/listings/components/listing-card-live-stats";
 import type { ListingCardData } from "@/features/listings/queries";
-import {
-  formatListingPrice,
-  formatTimeRemaining,
-} from "@/features/listings/utils";
+import { formatTimeRemaining } from "@/features/listings/utils";
 
 type ListingCardProps = {
   listing: ListingCardData;
@@ -47,22 +45,11 @@ export function ListingCard({ listing }: ListingCardProps) {
             {listing.title}
           </h2>
 
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-2xl border border-border/70 bg-background/55 px-3 py-2.5">
-              <dt className="sr-only">Current price</dt>
-              <dd className="flex items-center gap-2 font-semibold">
-                <BadgeDollarSign className="size-4 text-primary/90" />
-                <span>{formatListingPrice(listing.currentPriceCents)}</span>
-              </dd>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/55 px-3 py-2.5">
-              <dt className="sr-only">Bid count</dt>
-              <dd className="flex items-center gap-2 font-semibold">
-                <Gavel className="size-4 text-primary/90" />
-                <span>{listing.bidCount}</span>
-              </dd>
-            </div>
-          </dl>
+          <ListingCardLiveStats
+            listingId={listing.id}
+            currentPriceCents={listing.currentPriceCents}
+            bidCount={listing.bidCount}
+          />
 
           <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3 text-sm text-muted-foreground">
             <p className="flex min-w-0 items-center gap-2">

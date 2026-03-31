@@ -292,7 +292,7 @@ Status: Not started
 
 ## 4C - Live Listing Cards
 
-Status: Not started
+Status: Completed
 
 ### Deliverables
 
