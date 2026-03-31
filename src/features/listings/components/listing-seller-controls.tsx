@@ -27,6 +27,7 @@ type ListingSellerControlsProps = {
     condition: string;
     status: ListingStatus;
     startingBidCents: number;
+    bidCount: number;
     reservePriceCents: number | null;
     startsAt: Date | null;
     endsAt: Date;
@@ -148,7 +149,7 @@ export function ListingSellerControls({ listing }: ListingSellerControlsProps) {
         </div>
       ) : null}
 
-      {canReturnToDraft(listing.status, 0) ? (
+      {canReturnToDraft(listing.status, listing.bidCount) ? (
         <ConfirmActionDialog
           trigger={
             <Button type="button" size="lg" variant="secondary">

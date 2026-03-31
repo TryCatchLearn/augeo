@@ -105,6 +105,8 @@ export const listing = sqliteTable(
     category: text("category", { enum: listingCategories }).notNull(),
     condition: text("condition", { enum: listingConditions }).notNull(),
     startingBidCents: integer("starting_bid_cents").notNull(),
+    currentBidCents: integer("current_bid_cents"),
+    bidCount: integer("bid_count").default(0).notNull(),
     reservePriceCents: integer("reserve_price_cents"),
     aiDescriptionGenerationCount: integer("ai_description_generation_count")
       .default(0)
@@ -146,10 +148,33 @@ export const listingImage = sqliteTable(
   ],
 );
 
+export const bid = sqliteTable(
+  "bid",
+  {
+    id: text("id").primaryKey(),
+    listingId: text("listing_id")
+      .notNull()
+      .references(() => listing.id, { onDelete: "cascade" }),
+    bidderId: text("bidder_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    amountCents: integer("amount_cents").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    index("bid_listing_createdAt_idx").on(table.listingId, table.createdAt),
+    index("bid_listing_amount_idx").on(table.listingId, table.amountCents),
+    index("bid_bidderId_idx").on(table.bidderId),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   listings: many(listing),
+  bids: many(bid),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -172,11 +197,23 @@ export const listingRelations = relations(listing, ({ one, many }) => ({
     references: [user.id],
   }),
   images: many(listingImage),
+  bids: many(bid),
 }));
 
 export const listingImageRelations = relations(listingImage, ({ one }) => ({
   listing: one(listing, {
     fields: [listingImage.listingId],
     references: [listing.id],
+  }),
+}));
+
+export const bidRelations = relations(bid, ({ one }) => ({
+  listing: one(listing, {
+    fields: [bid.listingId],
+    references: [listing.id],
+  }),
+  bidder: one(user, {
+    fields: [bid.bidderId],
+    references: [user.id],
   }),
 }));

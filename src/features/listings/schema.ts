@@ -287,6 +287,13 @@ export const addListingImageSchema = z.object({
   uploadUrl: z.url(),
 });
 
+export const placeBidSchema = z.object({
+  listingId: z.string().min(1),
+  amountCents: z.number().int().positive("Enter a valid bid amount."),
+});
+
+export type PlaceBidInput = z.infer<typeof placeBidSchema>;
+
 export function validateListingImageCount(imageCount: number) {
   if (imageCount >= maxListingImageCount) {
     throw new Error(

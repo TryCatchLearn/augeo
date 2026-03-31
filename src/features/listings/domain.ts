@@ -59,6 +59,8 @@ export type ListingDraftDefaults = {
   status: "draft";
 };
 
+export type ViewerBidStatus = "highest" | "outbid" | "none";
+
 export class InvalidSmartListingResultError extends Error {}
 
 export const listingStatusLabels: Record<ListingStatus, string> = {
@@ -141,6 +143,78 @@ export function canReceiveBids(
   return status === "active" && endsAt.getTime() > now.getTime();
 }
 
+export function getBidIncrementCents(currentPriceCents: number) {
+  if (currentPriceCents < 10_000) {
+    return 100;
+  }
+
+  if (currentPriceCents < 50_000) {
+    return 500;
+  }
+
+  if (currentPriceCents < 100_000) {
+    return 1_000;
+  }
+
+  if (currentPriceCents < 500_000) {
+    return 2_500;
+  }
+
+  return 5_000;
+}
+
+export function getCurrentPriceCents(
+  startingBidCents: number,
+  currentBidCents: number | null,
+) {
+  return currentBidCents ?? startingBidCents;
+}
+
+export function getMinimumNextBidCents(
+  startingBidCents: number,
+  currentBidCents: number | null,
+) {
+  if (currentBidCents === null) {
+    return startingBidCents;
+  }
+
+  return currentBidCents + getBidIncrementCents(currentBidCents);
+}
+
+export function getViewerBidStatus(input: {
+  viewerId?: string | null;
+  highestBidderId?: string | null;
+  hasViewerBid: boolean;
+}): ViewerBidStatus {
+  if (input.viewerId && input.viewerId === input.highestBidderId) {
+    return "highest";
+  }
+
+  if (input.hasViewerBid) {
+    return "outbid";
+  }
+
+  return "none";
+}
+
+export function canPlaceBid(input: {
+  sellerId: string;
+  viewerId?: string | null;
+  status: ListingStatus;
+  endsAt: Date;
+  now?: Date;
+}) {
+  if (!input.viewerId) {
+    return false;
+  }
+
+  if (input.viewerId === input.sellerId) {
+    return false;
+  }
+
+  return canReceiveBids(input.status, input.endsAt, input.now);
+}
+
 export function canReturnToDraft(status: ListingStatus, bidCount: number) {
   return (status === "scheduled" || status === "active") && bidCount === 0;
 }
@@ -199,14 +273,6 @@ export function canViewListingDetail({
   }
 
   return sellerId === viewerId;
-}
-
-export function getPlaceholderPricing(startingBidCents: number) {
-  return {
-    currentBidCents: startingBidCents,
-    minimumBidCents: startingBidCents,
-    bidCount: 0,
-  };
 }
 
 export function normalizeSmartListingCategory(value: string): ListingCategory {

@@ -15,11 +15,13 @@ import {
   InvalidSmartListingResultError,
 } from "@/features/listings/domain";
 import {
+  BidActionError,
   deleteDraftListingRecords,
   deleteListingImageRecord,
   incrementListingDescriptionGenerationCount,
   insertDraftWithMainImage,
   insertListingImage,
+  placeBidForListing,
   setMainListingImage,
   updateDraftListing,
   updateListingStatus,
@@ -36,6 +38,7 @@ import {
   hasDescriptionEnhancementRunsRemaining,
   listingIdActionSchema,
   listingImageActionSchema,
+  placeBidSchema,
   saveDraftListingSchema,
   validateEnhancedDescription,
 } from "@/features/listings/schema";
@@ -48,6 +51,7 @@ import {
   createListingImageUploadSignature,
   deleteCloudinaryAssets,
 } from "@/server/cloudinary";
+import { formatListingPrice } from "./utils";
 
 function parseOrThrow<TOutput>(
   parser: {
@@ -185,7 +189,10 @@ export async function returnListingToDraftAction(input: unknown) {
     parsedInput.listingId,
   );
 
-  if (!existingListing || !canReturnToDraft(existingListing.status, 0)) {
+  if (
+    !existingListing ||
+    !canReturnToDraft(existingListing.status, existingListing.bidCount)
+  ) {
     throw new Error("Listing cannot be returned to draft.");
   }
 
@@ -197,6 +204,50 @@ export async function returnListingToDraftAction(input: unknown) {
   revalidateListingPaths(result.id);
 
   return { listingId: result.id, status: result.status };
+}
+
+export async function placeBidAction(input: unknown) {
+  try {
+    const session = await requireAuthenticatedSession();
+    const parsedInput = parseOrThrow(
+      placeBidSchema,
+      input,
+      "Invalid bid payload",
+    );
+    const result = await placeBidForListing({
+      ...parsedInput,
+      bidderId: session.user.id,
+    });
+
+    revalidateListingPaths(result.listingId);
+
+    return {
+      status: "success" as const,
+      listingId: result.listingId,
+    };
+  } catch (error) {
+    if (error instanceof BidActionError) {
+      const minimumBidMatch = error.message.match(
+        /^Bid must be at least (\d+) cents\.$/,
+      );
+
+      return {
+        status: "error" as const,
+        errorMessage: minimumBidMatch
+          ? `Bid must be at least ${formatListingPrice(Number(minimumBidMatch[1]))}.`
+          : error.message,
+      };
+    }
+
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return {
+        status: "error" as const,
+        errorMessage: "Sign in to place a bid.",
+      };
+    }
+
+    throw error;
+  }
 }
 
 export async function deleteDraftListingAction(input: unknown) {

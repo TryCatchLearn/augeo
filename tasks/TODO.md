@@ -1,362 +1,373 @@
-# Phase 3 Execution TODO
+# Phase 4 Execution TODO
 
-Created: 2026-03-27
+Created: 2026-03-31
 Status: Planning complete, implementation pending
 
 ## Objective
 
-Deliver Phase 3 browse improvements as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
+Deliver Phase 4 bidding and realtime updates as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
 
 ## Execution Order
 
-- `3A` blocks `3B`.
-- `3A` and `3B` block `3C`.
-- `3A` blocks `3D`.
-- `3D` should land after the public and dashboard query contracts are settled.
+- `4A` blocks `4B`, `4C`, and `4D`.
+- `4B` blocks `4C` and `4D`.
+- `4C` and `4D` can land independently after `4B`.
 
 ## Locked Decisions
 
-- `tasks/TODO.md` is the active standalone execution document for Phase 3.
+- `tasks/TODO.md` is the active standalone execution document for Phase 4.
 - `tasks/SPEC.md` remains the concise phase summary and tracker.
-- Phase 3 is a browse/discovery enhancement phase, not a public detail-page build phase.
-- `/listings` uses URL-driven, server-rendered browse state from `searchParams`.
-- Public `/listings` defaults to `status=active`.
-- Public status tabs are locked to:
-  - `active`
-  - `scheduled`
-  - `ended`
-- `/dashboard/listings` keeps its existing seller status tabs:
-  - `draft`
-  - `active`
-  - `scheduled`
-  - `ended`
-- `/dashboard/listings` adopts shared pagination only; it does not adopt the public filter/search controls row.
-- Navbar search is always visible.
-- On desktop, the navbar search sits centered between the brand and the right-side nav/account controls.
-- On smaller screens, the navbar search moves to a full-width second row and remains visible.
-- Navbar search submits only on:
-  - Enter key
-  - search button click
-- Navbar search does not debounce or auto-submit while typing.
-- Searching from a non-`/listings` route navigates to `/listings?q=...`.
-- Searching from `/listings` preserves the current `status`, `category`, `price`, `sort`, and `pageSize`, and resets `page=1`.
-- Empty search input falls back to browse behavior.
-- On `/listings`, status, category, price, sort, search, and page-size changes all reset `page=1`.
-- Filter dropdowns and sort apply immediately on selection change.
-- Reset clears:
-  - `category`
-  - `price`
-  - `sort`
-- Reset preserves:
-  - `status`
-  - `q`
-  - `pageSize`
-- Reset always sets `page=1`.
-- Pagination is offset-based and URL-driven through `page` and `pageSize`.
-- Shared page-size options are locked to:
-  - `6`
-  - `12`
-  - `18`
-  - `24`
-- Phase 3 price filtering and sorting use `startingBidCents`.
-- `sort=most_bids` exists in the UI and URL contract during Phase 3.
-- `sort=most_bids` is a temporary no-op in Phase 3 and must resolve to the same ordering as `sort=newest` until Phase 4 adds real bid persistence.
-- Search matching is simple case-insensitive contains matching against `title` and `description`.
-- Phase 3 does not add full-text search, tokenization, stemming, debounce, or auto-search.
-- Sticky pagination is sticky to the bottom of the page content area, not the viewport root.
-- The immediate follow-up session for this work is docs-only: update planning docs now, do not implement product code in this change.
+- Phase 4 introduces bidding and realtime auction-state updates, but it does not add auction finalization or persistent notification inbox data.
+- Realtime uses Ably over websockets with token auth.
+- The existing server-side Ably secret is `ABLY_API_KEY`; it must remain server-only.
+- Browser clients authenticate through a server-issued Ably token endpoint/route and must never receive the raw API key.
+- There must never be more than one Ably connection per browser tab.
+- Authenticated users hold a single global Ably connection while authenticated.
+- Guests connect only when routed to `/listings` or `/listings/[id]`.
+- Guests disconnect when they leave those routes.
+- `/listings/[id]/edit` does not count as a public listings route for guest realtime access.
+- Guests may subscribe only to `listing:*`.
+- Authenticated users may subscribe to `listing:*` and `user:{id}`.
+- Browser clients never publish directly to Ably.
+- Phase 4 does not include polling fallback; if realtime is unavailable, the temporary fallback is normal refresh/navigation behavior.
+- Outbid notifications in Phase 4 are realtime toast notifications only.
+- DB-backed notifications remain Phase 5 work.
+- `startingBidCents` remains the opening price only.
+- Everywhere that shows the live/current price must use `currentBidCents ?? startingBidCents`.
+- Listing cards must move from Phase 3 placeholder pricing to real cached bid state in Phase 4.
+- Bid history is newest-first and uses the stored bidder `user.name`.
+- Seller controls remain available only while `bidCount === 0`.
+- Once the first bid exists, seller controls are replaced by a read-only auction activity panel plus bid history.
+- The current highest bidder may place a higher bid as long as the new bid satisfies the next minimum increment.
+- Bid increments are locked to the following ladder:
+  - current bid `< $100`: `+$1`
+  - `$100 - $499.99`: `+$5`
+  - `$500 - $999.99`: `+$10`
+  - `$1,000 - $4,999.99`: `+$25`
+  - `$5,000+`: `+$50`
 
-## Shared Interfaces And Rules
+## Shared Interfaces And Contracts
 
-### Seed target
+### Schema and persistence contract
 
-- Expand seed data from `10` listings to exactly `20`.
-- Distribute sellers `8 / 6 / 6` across Bob, Alice, and Charlie.
-- Lock status distribution to:
-  - `9 active`
-  - `4 scheduled`
-  - `4 ended`
-  - `3 draft`
-- Bob should own `7` active listings so both `/listings` and `/dashboard/listings?status=active` exercise pagination with `pageSize=6`.
-- Every seeded listing gets exactly one main image.
-- Seed image URLs use stable picsum seeds in the format:
-  - `https://picsum.photos/seed/<slug>/1200/900`
-- Titles and image slugs should be chosen together so each picsum image is at least plausibly aligned with the listing.
-- Seed data should cover the listing category and condition enums broadly enough to support realistic visual testing across multiple combinations.
-- At least `4` seeded listings must have future `startsAt` values and `status=scheduled`.
-- At least `4` seeded listings must have past `endsAt` values and `status=ended`.
-- Active listings must have future `endsAt` values.
-- Draft listings remain present for seller dashboard coverage only and never appear on public `/listings`.
+- Add a new `bid` table.
+- `bid` columns are locked to:
+  - `id`
+  - `listingId`
+  - `bidderId`
+  - `amountCents`
+  - `createdAt`
+- Add cached bidding fields to `listing`:
+  - `currentBidCents` nullable
+  - `bidCount` default `0`
+- `currentBidCents` is nullable so listings with no bids can keep using `startingBidCents` as the displayed fallback.
+- Add indexes that support:
+  - bid history reads by listing ordered newest-first
+  - highest-bid lookup by listing
+  - bidder lookups for future dashboard work where practical
+- Bid placement must be transactional:
+  - re-read the listing and current highest bid inside the transaction
+  - validate against that fresh state
+  - insert the accepted bid
+  - update `listing.currentBidCents` and `listing.bidCount`
+  - commit before any Ably publish occurs
 
-### Shared browse query/result contract
+### Query and view-model contract
 
-- Add a typed public listings query parser/normalizer.
-- Add a typed dashboard listings query parser/normalizer.
-- Public `/listings` query params:
-  - `status=active|scheduled|ended`
-  - `q=<string>`
-  - `category=<listing category enum>`
-  - `price=lt_10|lt_50|lt_100|lt_500`
-  - `sort=newest|ending_soonest|most_bids|price_asc|price_desc`
-  - `page=<1-based integer>`
-  - `pageSize=6|12|18|24`
-- Dashboard `/dashboard/listings` query params:
-  - `status=draft|active|scheduled|ended`
-  - `page=<1-based integer>`
-  - `pageSize=6|12|18|24`
-- Public invalid or missing values normalize to:
-  - `status=active`
-  - empty `q`
-  - no category filter
-  - no price filter
-  - `sort=newest`
-  - `page=1`
-  - `pageSize=6`
-- Dashboard invalid or missing values normalize to:
-  - `status=draft`
-  - `page=1`
-  - `pageSize=6`
-- Search input is trimmed before query normalization.
-- An empty trimmed search string means “no search filter.”
-- Listing query results for public and dashboard pages must return:
-  - paginated items
-  - `totalCount`
-  - enough page/window metadata for the shared pagination component
-- Public browse queries must never return draft listings.
-- Public browse status filtering is exact by selected status.
+- Extend listing card data so cards expose:
+  - `currentPriceCents`
+  - `bidCount`
+  - existing display fields already used by the grid
+- Extend listing detail data so the detail page can server-render before realtime attaches.
+- Listing detail data must include:
+  - listing identity and seller metadata already present
+  - `startingBidCents`
+  - `currentBidCents`
+  - `currentPriceCents`
+  - `minimumNextBidCents`
+  - `bidCount`
+  - `highestBidderId`
+  - `viewerBidStatus` as `highest | outbid | none`
+  - `canPlaceBid`
+  - full bid history rows with bidder name, amount, and timestamp
+- Bid history is displayed newest bid first.
+- Seller-control logic must consume the real `bidCount` from the query layer rather than the current placeholder `0`.
 
-### Shared search and sort rules
+### Action and validation contract
 
-- Search uses simple case-insensitive `LIKE`/contains matching against:
-  - `listing.title`
-  - `listing.description`
-- Search does not tokenize, stem, or use SQLite FTS in Phase 3.
-- Stable sort rules for offset pagination are locked to:
-  - `newest`: `createdAt desc`
-  - `ending_soonest`: `endsAt asc`, then `createdAt desc`
-  - `most_bids`: same ordering as `newest` during Phase 3
-  - `price_asc`: `startingBidCents asc`, then `createdAt desc`
-  - `price_desc`: `startingBidCents desc`, then `createdAt desc`
-- Price filter options map to `startingBidCents` thresholds:
-  - `lt_10`
-  - `lt_50`
-  - `lt_100`
-  - `lt_500`
+- Add a dedicated bid placement server action.
+- Add a dedicated bid input schema for the action payload.
+- The bid action is authoritative for all business-rule enforcement.
+- Bid validation rules are locked to:
+  - viewer must be authenticated
+  - seller cannot bid on their own listing
+  - listing must exist
+  - listing must be `active`
+  - listing must not be expired
+  - first bid must be at least `startingBidCents`
+  - later bids must be at least `currentBidCents + requiredIncrement`
+  - highest bidder can raise their own bid if they satisfy the same next-minimum rule
+- The bid form must surface clear user-facing action errors for rejected bids.
 
-### Shared UI contract
+### Realtime event contract
 
-- Add a reusable public listings controls row for `/listings`.
-- The controls row sits on a single row below the page heading.
-- Controls row layout is locked to:
-  - left: public status tabs
-  - right: category dropdown, price dropdown, sort dropdown, reset button
-- Add a listings-aware navbar search component used by `SiteHeader`.
-- Add a reusable shared pagination component used by:
-  - `/listings`
-  - `/dashboard/listings`
-- Shared pagination layout is locked to:
-  - left: result count text
-  - center: shadcn-style pagination controls
-  - right: four page-size buttons
+- Listing channel name: `listing:{id}`
+- User channel name: `user:{id}`
+- Listing event name: `bid.placed`
+- User event name: `auction.outbid`
+- `bid.placed` payload must include:
+  - `listingId`
+  - `currentBidCents`
+  - `bidCount`
+  - `minimumNextBidCents`
+  - `highestBidderId`
+  - `bid`
+    - `id`
+    - `bidderId`
+    - `bidderName`
+    - `amountCents`
+    - `createdAt`
+- `auction.outbid` payload must include:
+  - `listingId`
+  - `listingTitle`
+  - `currentBidCents`
+  - `minimumNextBidCents`
+  - `bidCount`
+  - `listingUrl`
+  - enough event identity to dedupe reconnect/replay toasts, using the accepted bid id
+- `auction.outbid` is published only when an accepted bid displaces a different previous highest bidder.
+- `auction.outbid` is not published for:
+  - the first bid on a listing
+  - a bidder increasing their own already-highest bid
+  - unauthenticated viewers
 
-### Shared behavior
+### Realtime client contract
 
-- All browse state is URL-driven through `searchParams`.
-- Changing status, category, price, sort, search, or page size resets `page=1`.
-- Page links preserve the rest of the active query state.
-- Result count format is `start-end of total`.
-- Empty-state count format is `0-0 of 0`.
-- Partial final pages must use the true ending record number.
-- `/dashboard/listings` keeps its seller status tabs above the results grid and adopts pagination beneath the results only.
+- Add a root client-side realtime provider mounted from the app layout.
+- The provider owns the single Ably client for the tab.
+- The provider is responsible for:
+  - deciding when a connection should exist
+  - exposing listing-channel subscription utilities
+  - exposing authenticated user-channel subscription utilities
+  - ensuring connection reuse across cards, detail pages, and global toast handling
+- Listing cards and listing detail UI must consume shared provider state/utilities and must not create ad hoc Ably clients.
 
-## 3A - Seed Data and Status Tabs
-
-Status: Implemented on 2026-03-27
-
-### Deliverables
-
-- Seed data expanded from `10` listings to `20`.
-- Seed data covers a wider range of categories and conditions for realistic UI testing.
-- Public `/listings` gets URL-backed status tabs:
-  - `Active`
-  - `Scheduled`
-  - `Ended`
-- Existing dashboard seller tabs remain intact.
-- Public listings query contract is finalized around status filtering and pagination-ready results.
-
-### Implementation tasks
-
-- Update the seed plan in the implementation docs to expand the dataset and lock the exact seller and status distribution from the shared rules section.
-- Require at least `4` scheduled listings with future `startsAt`.
-- Require at least `4` ended listings with past `endsAt`.
-- Keep active listings with future `endsAt`.
-- Keep some draft listings for seller dashboard coverage.
-- Document that `/listings` filters by exact public status and never includes drafts.
-- Document that invalid public `status` values fall back to `active`.
-- Document that public status tabs are URL-backed and rendered below the `/listings` page heading.
-- Document that `/dashboard/listings` keeps its existing seller-status tab behavior unchanged during 3A.
-- Require the query-layer work for 3A to return both filtered results and `totalCount` so 3D can build on the same contract without reshaping it.
-
-### Test tasks
-
-- Seed smoke-check expectations for:
-  - total listing count
-  - counts by status
-  - counts by seller
-  - Bob active-listing count
-- Integration tests for public status-tab query behavior.
-- Integration tests for invalid public `status` normalization to `active`.
-- Integration tests proving dashboard seller tabs remain unchanged.
-
-### Exit criteria
-
-- Seed data supports realistic visual testing for status tabs and future pagination.
-- `/listings` switches correctly among active, scheduled, and ended results by URL state.
-- `/dashboard/listings` continues to work with `draft`, `active`, `scheduled`, and `ended` tabs.
-
-## 3B - Filter Dropdowns & Sort
+## 4A - Bid Model, Bid Form UI, And Bid History
 
 Status: Not started
 
 ### Deliverables
 
-- `/listings` gets a single controls row below the heading.
-- The right side of the row contains:
-  - category dropdown
-  - price dropdown
-  - sort dropdown
-  - reset button
-- Public listings query contract expands to support category, price, and sort.
+- Bid schema and migration finalized.
+- Cached listing bid fields finalized.
+- Bid placement action and validation contract finalized.
+- Listing detail page replaces the buyer placeholder with a real bid form.
+- Listing detail page includes a bid history panel beneath the bid panel.
+- Seller controls are hidden after the first accepted bid.
 
 ### Implementation tasks
 
-- Lock category options to `All Categories` plus every existing `listingCategories` enum value rendered with user-facing labels.
-- Lock price options to:
-  - `Any Price`
-  - `< $10`
-  - `< $50`
-  - `< $100`
-  - `< $500`
-- Lock sort options to:
-  - `Newest`
-  - `Ending Soonest`
-  - `Most Bids`
-  - `Price Low→High`
-  - `Price High→Low`
-- Document that the price filter uses `startingBidCents`.
-- Document that category and price filters combine with the selected status and any active search query.
-- Document that filter and sort changes apply immediately on selection change and reset `page=1`.
-- Document that reset preserves:
-  - `status`
-  - `q`
-  - `pageSize`
-- Document that reset clears:
-  - `category`
-  - `price`
-  - `sort`
-- Document that reset always returns `page=1`.
-- Call out explicitly that `Most Bids` is a temporary no-op in Phase 3 and resolves to the same ordering as `Newest`.
-- Document that invalid category, price, and sort values are ignored and normalized back to defaults.
+- Update the implementation docs to add the `bid` table and the new cached listing columns.
+- Require Drizzle schema, SQL migration, and any affected test harness expectations to land together.
+- Document the query-layer switch from placeholder bid data to persisted bid state.
+- Add and document domain helpers for:
+  - bid eligibility against listing status and expiration
+  - increment lookup from the locked price ladder
+  - minimum-next-bid calculation
+  - viewer bid status projection
+- Document that current price is derived as:
+  - `currentBidCents ?? startingBidCents`
+- Document the bid form behavior:
+  - buyers only
+  - prefilled with the minimum acceptable bid
+  - action error shown inline
+  - successful submission relies on normal server-action refresh behavior in `4A`
+- Document the listing-detail right-column layout:
+  - top card is the bid form for eligible buyers or seller activity panel for sellers/no-bid sellers
+  - bid history sits directly underneath
+  - bid history panel height shows about five rows before scrolling
+- Document seller behavior:
+  - `bidCount === 0`: existing seller controls remain
+  - `bidCount > 0`: seller controls are replaced with read-only auction activity information
+- Document that return-to-draft checks must use real persisted `bidCount`.
+- Document that bid history uses newest-first ordering and shows:
+  - bidder name
+  - amount
+  - timestamp
+- Lock the initial viewer bid status values to:
+  - `highest` when the viewer is the current highest bidder
+  - `outbid` when the viewer has at least one bid on the listing but is not highest
+  - `none` otherwise
 
 ### Test tasks
 
-- Unit tests for public query-param parsing and normalization.
-- Unit tests for category, price, and sort mapping helpers.
-- Integration tests for category filtering.
-- Integration tests for price filtering.
-- Integration tests for each real sort mode.
-- Integration test proving `sort=most_bids` resolves to the default ordering during Phase 3.
+- Unit tests for:
+  - bid increment tier mapping
+  - minimum-next-bid calculation
+  - bid eligibility by listing status and expiration
+  - viewer bid status projection
+- Integration tests for:
+  - valid first bid
+  - valid later bid
+  - highest-bidder self-raise success
+  - unauthenticated rejection
+  - seller self-bid rejection
+  - inactive listing rejection
+  - expired listing rejection
+  - insufficient increment rejection
+  - listing detail history ordering newest-first
+  - seller controls disappearing after the first bid
 
 ### Exit criteria
 
-- `/listings` supports status, category, price, and sort in combination.
-- Reset produces the locked preservation and clearing behavior.
-- The implementation docs leave no ambiguity about how `Most Bids` behaves before Phase 4.
+- The docs leave no ambiguity about schema changes, transactional bid placement, or server-side validation.
+- The docs fully specify how the bid form and bid history replace the Phase 1 placeholder UI.
+- The docs fully specify when sellers lose their mutable controls.
 
-## 3C - Search
+## 4B - Ably Setup And Listing Channel
 
-Status: Implemented on 2026-03-27
+Status: Not started
 
 ### Deliverables
 
-- Navbar search is centered and always visible.
-- Search submit behavior works on `/listings` and from any other page.
-- Search applies to listing title and description with simple contains matching only.
+- Server-only Ably helpers finalized.
+- Browser token-auth flow finalized.
+- Shared realtime provider finalized.
+- Listing detail page subscribes to `listing:{id}` and reacts to `bid.placed`.
 
 ### Implementation tasks
 
-- Document the desktop header layout with the search centered between the brand area and the right-side nav/account controls.
-- Document the mobile header layout with the search moved to a full-width second row while remaining visible.
-- Lock search form behavior to:
-  - Enter key submits
-  - search button click submits
-  - no debounce
-  - no auto-submit while typing
-- Lock route behavior so that, on `/listings`, search submit updates `q`, preserves current public browse state, and resets `page=1`.
-- Lock route behavior so that, from any non-`/listings` route, search submit navigates to:
-  - `/listings?q=<term>` when the trimmed query is non-empty
-  - `/listings` when the trimmed query is empty
-- Document that search matching is case-insensitive `LIKE` against `title` and `description`.
-- Document that empty search falls back to browse behavior.
-- Document that search combines with status, category, price, sort, and pagination rules on `/listings`.
+- Document the Ably integration boundaries:
+  - server-only Ably publish/auth code
+  - browser-side token-auth client code
+  - shared provider mounted from app layout
+- Lock env usage to `ABLY_API_KEY` on the server.
+- Document the Ably token endpoint/route requirement and explicitly forbid exposing `ABLY_API_KEY` to the client.
+- Document token capability rules:
+  - guests: subscribe to `listing:*` only
+  - authenticated users: subscribe to `listing:*` and `user:{id}`
+  - no browser publish capability
+- Document the single-connection policy:
+  - authenticated user session owns the connection globally
+  - guests connect only on `/listings` and `/listings/[id]`
+  - guests disconnect off those routes
+  - a pre-existing authenticated connection prevents any route-scoped guest connection logic from creating another client
+- Document the root provider responsibilities:
+  - own and cache the Ably client instance
+  - connect/disconnect according to auth and route state
+  - expose listing subscription hooks/utilities
+  - expose user-channel subscription hooks/utilities for `4D`
+- Document the listing detail subscription behavior:
+  - subscribe to `listing:{id}`
+  - react to `bid.placed`
+  - update current price
+  - update bid count
+  - update minimum next bid
+  - update viewer bid status
+  - prepend the new bid to history
+  - lock seller controls once `bidCount > 0`
+- Document that the server publishes `bid.placed` only after a successful committed bid transaction.
 
 ### Test tasks
 
-- App-level tests for header search rendering.
-- App-level tests for explicit submit behavior.
-- Integration tests for search query filtering against titles.
-- Integration tests for search query filtering against descriptions.
-- Integration tests for search combined with status and filters.
-- Integration tests for non-`/listings` search redirect behavior.
+- Unit tests for:
+  - Ably token capability generation
+  - route-to-connection policy for guests and authenticated users
+- Client tests for:
+  - one shared Ably client per tab
+  - guest connect/disconnect on route changes
+  - authenticated connection reuse across pages
+- Detail-page subscription tests proving `bid.placed` updates:
+  - price
+  - bid count
+  - minimum bid
+  - bid history
+  - seller lock state
 
 ### Exit criteria
 
-- Search is always visible in the header.
-- Search runs only on explicit submit.
-- `/listings` can refine results with `q` plus active filters and sort.
+- The docs fully specify the Ably auth model and connection policy.
+- The docs fully specify how listing detail state transitions from server render to realtime updates.
+- The docs leave no room for duplicate Ably clients within one tab.
 
-## 3D - Pagination
+## 4C - Live Listing Cards
 
-Status: Implemented on 2026-03-27
+Status: Not started
 
 ### Deliverables
 
-- Shared pagination component used by `/listings` and `/dashboard/listings`.
-- Sticky bottom pagination layout with result count, controls, and page-size buttons.
-- Offset-based pagination that respects all active query state.
+- Thin client wrapper around each listing card finalized.
+- Public and dashboard grids reuse the same shared realtime connection strategy.
+- Listing cards update current price and bid count from `bid.placed`.
 
 ### Implementation tasks
 
-- Lock the shared pagination layout to:
-  - left: result count text
-  - center: shadcn-style pagination controls
-  - right: four page-size buttons for `6`, `12`, `18`, and `24`
-- Document that page-size changes update `pageSize` and reset `page=1`.
-- Document that previous, next, and page-number links preserve the rest of the active query state.
-- Require both public and dashboard listing queries to return:
-  - paginated items
-  - `totalCount`
-  - page/window metadata required by the shared component
-- Document sticky placement at the bottom of each page content section so pagination stays visible while scrolling long result lists.
-- Document empty and partial-page cases:
-  - no results render `0-0 of 0`
-  - the last page uses the true ending number
-- Document that `/dashboard/listings` adopts pagination only and keeps existing seller status tabs above the results grid.
+- Document that the server-rendered card shell stays in place.
+- Document that only the live price and bid-count fragment becomes client-managed.
+- Document that each card wrapper subscribes to `listing:{id}` through the shared realtime provider.
+- Document that the wrapper updates only:
+  - `currentPriceCents`
+  - `bidCount`
+- Document that both `/listings` and `/dashboard/listings` use the same wrapper so authenticated sellers reuse the global connection.
+- Document that cards do not create direct Ably clients or bypass the provider.
 
 ### Test tasks
 
-- Unit tests for offset and page-window calculations.
-- Unit tests for result-count formatting.
-- Integration tests for `/listings` pagination preserving search, filter, and sort state.
-- Integration tests for `/dashboard/listings` pagination preserving seller status.
-- App-level tests for page-size selection behavior.
-- App-level tests for sticky pagination rendering hooks if practical.
+- Client tests for:
+  - price and bid-count updates after `bid.placed`
+  - unsubscribe on unmount
+  - no duplicate connection creation across multiple cards
+- Integration/app tests proving:
+  - public cards use the route-scoped guest connection behavior
+  - authenticated dashboard cards reuse the existing auth connection
 
 ### Exit criteria
 
-- Both pages use the same pagination component and query contract.
-- Pagination respects all active filters, search, sort, and seller status.
-- Page-size changes and page navigation are deterministic and URL-driven.
+- The docs fully specify the card wrapper responsibilities and limits.
+- The docs make it clear that cards only consume shared realtime state and never own a connection directly.
+
+## 4D - Outbid Toast Notification
+
+Status: Not started
+
+### Deliverables
+
+- Sonner-based global toast delivery finalized.
+- Global authenticated user-channel subscription finalized.
+- Outbid toast payload and dedupe behavior finalized.
+
+### Implementation tasks
+
+- Document the dependency addition for `sonner`.
+- Document mounting a global toaster in the app shell/layout.
+- Document that the shared realtime provider subscribes authenticated users to `user:{id}` globally.
+- Document the `auction.outbid` publish rules:
+  - publish only when a new accepted bid displaces a different previous highest bidder
+  - skip first bid
+  - skip self-rebid while still highest
+- Document toast behavior:
+  - shown on any page while authenticated
+  - includes listing title
+  - includes the new current price
+  - includes a link to the listing
+  - dedupes replay/reconnect duplicates using the accepted bid id plus listing identity
+- Document that this work remains realtime-only in Phase 4 and does not create DB notification rows or read/unread state.
+
+### Test tasks
+
+- Client tests for:
+  - toast rendering on any authenticated page
+  - no toast for first-bid cases
+  - no toast for self-rebid while already highest
+  - dedupe on repeated event delivery
+- App/integration tests for:
+  - toast CTA target URL
+  - guest sessions never subscribing to `user:{id}`
+
+### Exit criteria
+
+- The docs fully specify when outbid toasts are published and when they are suppressed.
+- The docs fully specify the global-toast behavior without expanding scope into Phase 5 notifications.
 
 ## Final Verification Checklist
 
@@ -367,6 +378,6 @@ Status: Implemented on 2026-03-27
 
 ## Completion Notes
 
-- Update `tasks/SPEC.md` tracker checkboxes as the Phase 3 query contract, seed work, sub-phases, and tests land.
+- Update `tasks/SPEC.md` tracker checkboxes as Phase 4 planning items, contracts, implementation work, and tests land.
 - Keep `tasks/TODO.md` self-sufficient; future implementation sessions should not need to reopen `tasks/SPEC.md` for execution details.
-- If Phase 3 scope changes, update this file before coding so later sessions inherit the current source of truth.
+- If Phase 4 scope changes, update this file before coding so later sessions inherit the current source of truth.

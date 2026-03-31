@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession } from "@/features/auth/session";
+import { ListingAuctionActivityPanel } from "@/features/listings/components/listing-auction-activity-panel";
+import { ListingBidForm } from "@/features/listings/components/listing-bid-form";
+import { ListingBidHistory } from "@/features/listings/components/listing-bid-history";
 import { ListingImageGallery } from "@/features/listings/components/listing-image-gallery";
 import { ListingImageUploadPanel } from "@/features/listings/components/listing-image-upload-panel";
 import { ListingSellerControls } from "@/features/listings/components/listing-seller-controls";
-import { getPlaceholderPricing } from "@/features/listings/domain";
 import { getListingDetailForViewer } from "@/features/listings/queries";
 import {
   formatListingPrice,
@@ -31,12 +33,29 @@ export default async function ListingDetailPage({
 
   const isOwner = session?.user.id === listing.sellerId;
   const canManageImages = isOwner && listing.status === "draft";
-  const pricing = getPlaceholderPricing(listing.startingBidCents);
   const timeMeta = getListingTimeMeta(
     listing.status,
     listing.endsAt,
     listing.startsAt,
   );
+  const showSellerControls = isOwner && listing.bidCount === 0;
+  const topCardTitle = isOwner
+    ? showSellerControls
+      ? "Seller Controls"
+      : "Auction Activity"
+    : listing.canPlaceBid
+      ? "Place A Bid"
+      : "Auction Activity";
+  const highestBidderLabel = listing.highestBidderId
+    ? listing.viewerBidStatus === "highest"
+      ? "You"
+      : (listing.bidHistory[0]?.bidderName ?? "Current leader")
+    : "No bids yet";
+  const buyerActivityMessage = session
+    ? listing.status !== "active"
+      ? "Bidding is unavailable because this listing is not currently active."
+      : "You can watch the live auction activity here, but bidding is unavailable for your account on this listing."
+    : "Sign in to place a bid. You can still watch the current auction activity below.";
 
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
@@ -61,7 +80,7 @@ export default async function ListingDetailPage({
             Current Bid
           </dt>
           <dd className="mt-2 text-xl font-semibold">
-            {formatListingPrice(pricing.currentBidCents)}
+            {formatListingPrice(listing.currentPriceCents)}
           </dd>
         </div>
         <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-4">
@@ -69,7 +88,7 @@ export default async function ListingDetailPage({
             Minimum Bid
           </dt>
           <dd className="mt-2 text-xl font-semibold">
-            {formatListingPrice(pricing.minimumBidCents)}
+            {formatListingPrice(listing.minimumNextBidCents)}
           </dd>
         </div>
         <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-4">
@@ -139,42 +158,45 @@ export default async function ListingDetailPage({
         <div className="space-y-6">
           <Card className="rounded-[2rem]">
             <CardHeader className="px-6 pt-6">
-              <CardTitle className="text-xl">
-                {isOwner ? "Seller Controls" : "Place A Bid"}
-              </CardTitle>
+              <CardTitle className="text-xl">{topCardTitle}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-6 pb-6">
-              {isOwner ? (
+              {showSellerControls ? (
                 <ListingSellerControls listing={listing} />
+              ) : isOwner ? (
+                <ListingAuctionActivityPanel
+                  currentPriceCents={listing.currentPriceCents}
+                  minimumNextBidCents={listing.minimumNextBidCents}
+                  bidCount={listing.bidCount}
+                  highestBidderLabel={highestBidderLabel}
+                  message="Bids are live on this listing, so seller controls are now read-only. Review the current auction state and follow bid history below."
+                />
+              ) : listing.canPlaceBid ? (
+                <ListingBidForm
+                  listingId={listing.id}
+                  minimumNextBidCents={listing.minimumNextBidCents}
+                  currentPriceCents={listing.currentPriceCents}
+                  bidCount={listing.bidCount}
+                  viewerBidStatus={listing.viewerBidStatus}
+                />
               ) : (
-                <>
-                  <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                    <p className="text-sm leading-7 text-muted-foreground">
-                      Bidding is placeholder-only in Phase 1. Buyers can review
-                      the item, track the starting price, and get ready for the
-                      live controls in a later phase.
-                    </p>
-                  </div>
-                  <dl className="grid gap-3">
-                    <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                      <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                        Starting Bid
-                      </dt>
-                      <dd className="mt-2 text-lg font-semibold">
-                        {formatListingPrice(listing.startingBidCents)}
-                      </dd>
-                    </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/55 p-4">
-                      <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-                        Bid Count
-                      </dt>
-                      <dd className="mt-2 text-lg font-semibold">
-                        {pricing.bidCount} bids
-                      </dd>
-                    </div>
-                  </dl>
-                </>
+                <ListingAuctionActivityPanel
+                  currentPriceCents={listing.currentPriceCents}
+                  minimumNextBidCents={listing.minimumNextBidCents}
+                  bidCount={listing.bidCount}
+                  highestBidderLabel={highestBidderLabel}
+                  message={buyerActivityMessage}
+                />
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2rem]">
+            <CardHeader className="px-6 pt-6">
+              <CardTitle className="text-xl">Bid History</CardTitle>
+            </CardHeader>
+            <CardContent className="px-6 pb-6">
+              <ListingBidHistory bids={listing.bidHistory} />
             </CardContent>
           </Card>
 

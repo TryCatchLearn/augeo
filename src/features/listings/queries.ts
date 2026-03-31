@@ -1,10 +1,15 @@
 import { and, asc, desc, eq, like, lt, or, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
-import { listing, listingImage, user } from "@/db/schema";
+import { bid, listing, listingImage, user } from "@/db/schema";
 import {
+  canPlaceBid,
   canViewListingDetail,
+  getCurrentPriceCents,
+  getMinimumNextBidCents,
+  getViewerBidStatus,
   type ListingStatus,
+  type ViewerBidStatus,
 } from "@/features/listings/domain";
 import { getPublicListingPriceThresholdCents } from "@/features/listings/helpers/browse-options";
 import {
@@ -21,10 +26,19 @@ export type ListingCardData = {
   title: string;
   status: ListingStatus;
   startingBidCents: number;
+  currentPriceCents: number;
   bidCount: number;
   sellerName: string;
   endsAt: Date;
   imageUrl: string | null;
+};
+
+export type BidHistoryRow = {
+  id: string;
+  bidderId: string;
+  bidderName: string;
+  amountCents: number;
+  createdAt: Date;
 };
 
 export type ListingDetailData = {
@@ -38,10 +52,18 @@ export type ListingDetailData = {
   condition: string;
   status: "draft" | "scheduled" | "active" | "ended";
   startingBidCents: number;
+  currentBidCents: number | null;
+  currentPriceCents: number;
+  minimumNextBidCents: number;
+  bidCount: number;
+  highestBidderId: string | null;
+  viewerBidStatus: ViewerBidStatus;
+  canPlaceBid: boolean;
   reservePriceCents: number | null;
   aiDescriptionGenerationCount: number;
   startsAt: Date | null;
   endsAt: Date;
+  bidHistory: BidHistoryRow[];
   images: Array<{
     id: string;
     url: string;
@@ -54,6 +76,7 @@ export type OwnedListingRecord = {
   sellerId: string;
   status: ListingStatus;
   startsAt: Date | null;
+  bidCount: number;
   aiDescriptionGenerationCount: number;
 };
 
@@ -81,7 +104,8 @@ const listingCardSelection = {
   title: listing.title,
   status: listing.status,
   startingBidCents: listing.startingBidCents,
-  bidCount: sql<number>`0`,
+  currentPriceCents: sql<number>`coalesce(${listing.currentBidCents}, ${listing.startingBidCents})`,
+  bidCount: listing.bidCount,
   sellerName: user.name,
   endsAt: listing.endsAt,
   imageUrl: listingImage.url,
@@ -92,9 +116,19 @@ function getPublicListingOrderBy(sort: PublicListingSort) {
     case "ending_soonest":
       return [asc(listing.endsAt), desc(listing.createdAt)] as const;
     case "price_asc":
-      return [asc(listing.startingBidCents), desc(listing.createdAt)] as const;
+      return [
+        asc(
+          sql`coalesce(${listing.currentBidCents}, ${listing.startingBidCents})`,
+        ),
+        desc(listing.createdAt),
+      ] as const;
     case "price_desc":
-      return [desc(listing.startingBidCents), desc(listing.createdAt)] as const;
+      return [
+        desc(
+          sql`coalesce(${listing.currentBidCents}, ${listing.startingBidCents})`,
+        ),
+        desc(listing.createdAt),
+      ] as const;
     case "newest":
       return [desc(listing.createdAt)] as const;
   }
@@ -122,7 +156,7 @@ function buildPublicListingWhereClause(
   if (query.price) {
     conditions.push(
       lt(
-        listing.startingBidCents,
+        sql`coalesce(${listing.currentBidCents}, ${listing.startingBidCents})`,
         getPublicListingPriceThresholdCents(query.price),
       ),
     );
@@ -205,6 +239,7 @@ export async function listSellerListingCards(
 
 async function getListingDetail(
   listingId: string,
+  viewerId?: string | null,
   database?: Database,
 ): Promise<ListingDetailData | null> {
   const resolvedDatabase = await resolveDatabase(database);
@@ -220,6 +255,8 @@ async function getListingDetail(
       condition: listing.condition,
       status: listing.status,
       startingBidCents: listing.startingBidCents,
+      currentBidCents: listing.currentBidCents,
+      bidCount: listing.bidCount,
       reservePriceCents: listing.reservePriceCents,
       aiDescriptionGenerationCount: listing.aiDescriptionGenerationCount,
       startsAt: listing.startsAt,
@@ -247,8 +284,71 @@ async function getListingDetail(
     ...listingDetail
   } = firstResult;
 
+  const bidHistory = await resolvedDatabase
+    .select({
+      id: bid.id,
+      bidderId: bid.bidderId,
+      bidderName: user.name,
+      amountCents: bid.amountCents,
+      createdAt: bid.createdAt,
+    })
+    .from(bid)
+    .innerJoin(user, eq(bid.bidderId, user.id))
+    .where(eq(bid.listingId, listingId))
+    .orderBy(desc(bid.createdAt));
+
+  const [highestBid] = await resolvedDatabase
+    .select({
+      bidderId: bid.bidderId,
+      amountCents: bid.amountCents,
+    })
+    .from(bid)
+    .where(eq(bid.listingId, listingId))
+    .orderBy(desc(bid.amountCents), desc(bid.createdAt))
+    .limit(1);
+
+  const hasViewerBid = viewerId
+    ? (
+        await resolvedDatabase
+          .select({
+            id: bid.id,
+          })
+          .from(bid)
+          .where(and(eq(bid.listingId, listingId), eq(bid.bidderId, viewerId)))
+          .limit(1)
+      ).length > 0
+    : false;
+
+  const currentBidCents =
+    highestBid?.amountCents ?? listingDetail.currentBidCents ?? null;
+  const currentPriceCents = getCurrentPriceCents(
+    listingDetail.startingBidCents,
+    currentBidCents,
+  );
+  const minimumNextBidCents = getMinimumNextBidCents(
+    listingDetail.startingBidCents,
+    currentBidCents,
+  );
+  const highestBidderId = highestBid?.bidderId ?? null;
+
   return {
     ...listingDetail,
+    currentBidCents,
+    currentPriceCents,
+    minimumNextBidCents,
+    highestBidderId,
+    viewerBidStatus: getViewerBidStatus({
+      viewerId,
+      highestBidderId,
+      hasViewerBid,
+    }),
+    canPlaceBid: canPlaceBid({
+      sellerId: listingDetail.sellerId,
+      viewerId,
+      status: listingDetail.status,
+      endsAt: listingDetail.endsAt,
+    }),
+    bidHistory,
     images: results.flatMap((result) => {
       if (!result.imageId || !result.imageUrl) {
         return [];
@@ -270,7 +370,7 @@ export async function getListingDetailForViewer(
   viewerId?: string | null,
   database?: Database,
 ) {
-  const result = await getListingDetail(listingId, database);
+  const result = await getListingDetail(listingId, viewerId, database);
 
   if (!result) {
     return null;
@@ -301,6 +401,7 @@ export async function getOwnedListing(
       sellerId: listing.sellerId,
       status: listing.status,
       startsAt: listing.startsAt,
+      bidCount: listing.bidCount,
       aiDescriptionGenerationCount: listing.aiDescriptionGenerationCount,
     })
     .from(listing)

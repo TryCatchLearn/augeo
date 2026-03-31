@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listing, listingImage, user } from "@/db/schema";
+import { bid, listing, listingImage, user } from "@/db/schema";
 import { normalizePublicListingsQuery } from "@/features/listings/helpers/browse-query";
 import {
   getListingDetailForViewer,
@@ -104,6 +104,7 @@ describe("listing queries", () => {
       id: activeListingId,
       title: "Public Camera",
       status: "active",
+      currentPriceCents: 25000,
       sellerName: "Seller One",
       imageUrl: "https://picsum.photos/seed/public-camera/1200/900",
       bidCount: 0,
@@ -521,6 +522,140 @@ describe("listing queries", () => {
     expect(listings.items.map((item) => item.title)).toEqual([
       "Ends First",
       "Ends Later",
+    ]);
+  });
+
+  it("uses cached bidding state for listing card prices", async () => {
+    const sellerId = randomUUID();
+
+    await testDatabase.db.insert(user).values({
+      id: sellerId,
+      name: "Seller One",
+      email: "seller-one@example.test",
+      emailVerified: true,
+    });
+
+    await testDatabase.db.insert(listing).values([
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Bidless Listing",
+        description: "No bids yet",
+        location: "Miami, FL",
+        category: "art",
+        condition: "good",
+        startingBidCents: 22_000,
+        currentBidCents: null,
+        bidCount: 0,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-04-02T12:00:00.000Z"),
+        status: "active",
+      },
+      {
+        id: randomUUID(),
+        sellerId,
+        title: "Active Bidding",
+        description: "Has a live bid",
+        location: "Miami, FL",
+        category: "art",
+        condition: "good",
+        startingBidCents: 22_000,
+        currentBidCents: 27_500,
+        bidCount: 3,
+        reservePriceCents: null,
+        startsAt: null,
+        endsAt: new Date("2026-04-03T12:00:00.000Z"),
+        status: "active",
+      },
+    ]);
+
+    const listings = await listPublicListingCards(
+      { status: "active", sort: "price_desc" },
+      testDatabase.db,
+    );
+
+    expect(listings.items.map((item) => item.currentPriceCents)).toEqual([
+      27_500, 22_000,
+    ]);
+    expect(listings.items.map((item) => item.bidCount)).toEqual([3, 0]);
+  });
+
+  it("returns listing detail bid history newest-first with viewer status", async () => {
+    const sellerId = randomUUID();
+    const highestBidderId = randomUUID();
+    const outbidBidderId = randomUUID();
+    const listingId = randomUUID();
+
+    await testDatabase.db.insert(user).values([
+      {
+        id: sellerId,
+        name: "Seller One",
+        email: "seller-one@example.test",
+        emailVerified: true,
+      },
+      {
+        id: highestBidderId,
+        name: "Highest Bidder",
+        email: "highest@example.test",
+        emailVerified: true,
+      },
+      {
+        id: outbidBidderId,
+        name: "Outbid Bidder",
+        email: "outbid@example.test",
+        emailVerified: true,
+      },
+    ]);
+
+    await testDatabase.db.insert(listing).values({
+      id: listingId,
+      sellerId,
+      title: "Auction Camera",
+      description: "Live listing",
+      location: "Portland, OR",
+      category: "electronics",
+      condition: "good",
+      startingBidCents: 10_000,
+      currentBidCents: 10_100,
+      bidCount: 2,
+      reservePriceCents: null,
+      startsAt: null,
+      endsAt: new Date("2026-04-10T12:00:00.000Z"),
+      status: "active",
+    });
+
+    await testDatabase.db.insert(bid).values([
+      {
+        id: randomUUID(),
+        listingId,
+        bidderId: outbidBidderId,
+        amountCents: 10_000,
+        createdAt: new Date("2026-04-01T12:00:00.000Z"),
+      },
+      {
+        id: randomUUID(),
+        listingId,
+        bidderId: highestBidderId,
+        amountCents: 10_100,
+        createdAt: new Date("2026-04-01T12:02:00.000Z"),
+      },
+    ]);
+
+    const detail = await getListingDetailForViewer(
+      listingId,
+      outbidBidderId,
+      testDatabase.db,
+    );
+
+    expect(detail).not.toBeNull();
+    expect(detail?.currentPriceCents).toBe(10_100);
+    expect(detail?.minimumNextBidCents).toBe(10_600);
+    expect(detail?.highestBidderId).toBe(highestBidderId);
+    expect(detail?.viewerBidStatus).toBe("outbid");
+    expect(detail?.bidHistory.map((entry) => entry.bidderName)).toEqual([
+      "Highest Bidder",
+      "Outbid Bidder",
     ]);
   });
 

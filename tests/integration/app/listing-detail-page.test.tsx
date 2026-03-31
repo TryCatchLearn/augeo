@@ -33,36 +33,54 @@ vi.mock("next/navigation", async () => {
   };
 });
 
+function createListingDetail(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "listing-1",
+    sellerId: "seller-1",
+    sellerName: "Seller One",
+    title: "Collector Camera",
+    description: "Beautiful condition and ready for bidding.",
+    location: "Portland, OR",
+    category: "electronics",
+    condition: "like_new",
+    status: "active",
+    startingBidCents: 45000,
+    currentBidCents: null,
+    currentPriceCents: 45000,
+    minimumNextBidCents: 45000,
+    bidCount: 0,
+    highestBidderId: null,
+    viewerBidStatus: "none",
+    canPlaceBid: true,
+    reservePriceCents: null,
+    startsAt: null,
+    endsAt: new Date("2026-03-25T12:00:00.000Z"),
+    bidHistory: [],
+    images: [],
+    ...overrides,
+  };
+}
+
 describe("Listing detail page", () => {
   it("renders public listing details with gallery thumbnails", async () => {
     hoisted.getSession.mockResolvedValue(null);
-    hoisted.getListingDetailForViewer.mockResolvedValue({
-      id: "listing-1",
-      sellerId: "seller-1",
-      sellerName: "Seller One",
-      title: "Collector Camera",
-      description: "Beautiful condition and ready for bidding.",
-      location: "Portland, OR",
-      category: "electronics",
-      condition: "like_new",
-      status: "active",
-      startingBidCents: 45000,
-      reservePriceCents: null,
-      startsAt: null,
-      endsAt: new Date("2026-03-25T12:00:00.000Z"),
-      images: [
-        {
-          id: "image-1",
-          url: "https://picsum.photos/seed/camera-main/1200/900",
-          isMain: true,
-        },
-        {
-          id: "image-2",
-          url: "https://picsum.photos/seed/camera-side/1200/900",
-          isMain: false,
-        },
-      ],
-    });
+    hoisted.getListingDetailForViewer.mockResolvedValue(
+      createListingDetail({
+        canPlaceBid: false,
+        images: [
+          {
+            id: "image-1",
+            url: "https://picsum.photos/seed/camera-main/1200/900",
+            isMain: true,
+          },
+          {
+            id: "image-2",
+            url: "https://picsum.photos/seed/camera-side/1200/900",
+            isMain: false,
+          },
+        ],
+      }),
+    );
 
     const { default: ListingDetailPage } = await import(
       "@/app/listings/[id]/page"
@@ -75,8 +93,8 @@ describe("Listing detail page", () => {
     expect(
       screen.getByRole("heading", { name: "Collector Camera" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Place A Bid")).toBeInTheDocument();
-    expect(screen.getAllByText("$450.00")).toHaveLength(3);
+    expect(screen.getByText("Auction Activity")).toBeInTheDocument();
+    expect(screen.getAllByText("$450.00")).toHaveLength(4);
     expect(
       screen.getByRole("img", { name: "Collector Camera" }),
     ).toHaveAttribute("src", expect.stringContaining("camera-main"));
@@ -102,22 +120,19 @@ describe("Listing detail page", () => {
     });
 
     hoisted.getSession.mockResolvedValue(session);
-    hoisted.getListingDetailForViewer.mockResolvedValue({
-      id: "listing-1",
-      sellerId: "seller-1",
-      sellerName: "Seller One",
-      title: "Owner Draft",
-      description: "Draft details",
-      location: "Austin, TX",
-      category: "other",
-      condition: "good",
-      status: "draft",
-      startingBidCents: 18000,
-      reservePriceCents: null,
-      startsAt: null,
-      endsAt: new Date("2026-03-25T12:00:00.000Z"),
-      images: [],
-    });
+    hoisted.getListingDetailForViewer.mockResolvedValue(
+      createListingDetail({
+        title: "Owner Draft",
+        description: "Draft details",
+        location: "Austin, TX",
+        category: "other",
+        condition: "good",
+        status: "draft",
+        startingBidCents: 18000,
+        currentPriceCents: 18000,
+        minimumNextBidCents: 18000,
+      }),
+    );
 
     const { default: ListingDetailPage } = await import(
       "@/app/listings/[id]/page"
@@ -150,22 +165,22 @@ describe("Listing detail page", () => {
     });
 
     hoisted.getSession.mockResolvedValue(session);
-    hoisted.getListingDetailForViewer.mockResolvedValue({
-      id: "listing-1",
-      sellerId: "seller-1",
-      sellerName: "Seller One",
-      title: "Scheduled Draft",
-      description: "Scheduled details",
-      location: "Austin, TX",
-      category: "other",
-      condition: "good",
-      status: "scheduled",
-      startingBidCents: 18000,
-      reservePriceCents: 22000,
-      startsAt: new Date("2026-03-26T12:00:00.000Z"),
-      endsAt: new Date("2026-03-27T12:00:00.000Z"),
-      images: [],
-    });
+    hoisted.getListingDetailForViewer.mockResolvedValue(
+      createListingDetail({
+        title: "Scheduled Draft",
+        description: "Scheduled details",
+        location: "Austin, TX",
+        category: "other",
+        condition: "good",
+        status: "scheduled",
+        startingBidCents: 18000,
+        currentPriceCents: 18000,
+        minimumNextBidCents: 18000,
+        reservePriceCents: 22000,
+        startsAt: new Date("2026-03-26T12:00:00.000Z"),
+        endsAt: new Date("2026-03-27T12:00:00.000Z"),
+      }),
+    );
 
     const { default: ListingDetailPage } = await import(
       "@/app/listings/[id]/page"
@@ -197,28 +212,26 @@ describe("Listing detail page", () => {
     });
 
     hoisted.getSession.mockResolvedValue(session);
-    hoisted.getListingDetailForViewer.mockResolvedValue({
-      id: "listing-1",
-      sellerId: "seller-1",
-      sellerName: "Seller One",
-      title: "Owner Draft",
-      description: "Draft details",
-      location: "Austin, TX",
-      category: "other",
-      condition: "good",
-      status: "draft",
-      startingBidCents: 18000,
-      reservePriceCents: null,
-      startsAt: null,
-      endsAt: new Date("2026-03-25T12:00:00.000Z"),
-      images: [
-        {
-          id: "image-1",
-          url: "https://picsum.photos/seed/camera-main/1200/900",
-          isMain: true,
-        },
-      ],
-    });
+    hoisted.getListingDetailForViewer.mockResolvedValue(
+      createListingDetail({
+        title: "Owner Draft",
+        description: "Draft details",
+        location: "Austin, TX",
+        category: "other",
+        condition: "good",
+        status: "draft",
+        startingBidCents: 18000,
+        currentPriceCents: 18000,
+        minimumNextBidCents: 18000,
+        images: [
+          {
+            id: "image-1",
+            url: "https://picsum.photos/seed/camera-main/1200/900",
+            isMain: true,
+          },
+        ],
+      }),
+    );
 
     const { default: ListingDetailPage } = await import(
       "@/app/listings/[id]/page"
@@ -245,22 +258,20 @@ describe("Listing detail page", () => {
     });
 
     hoisted.getSession.mockResolvedValue(session);
-    hoisted.getListingDetailForViewer.mockResolvedValue({
-      id: "listing-1",
-      sellerId: "seller-1",
-      sellerName: "Seller One",
-      title: "Ended Listing",
-      description: "Ended details",
-      location: "Austin, TX",
-      category: "other",
-      condition: "good",
-      status: "ended",
-      startingBidCents: 18000,
-      reservePriceCents: null,
-      startsAt: null,
-      endsAt: new Date("2026-03-25T12:00:00.000Z"),
-      images: [],
-    });
+    hoisted.getListingDetailForViewer.mockResolvedValue(
+      createListingDetail({
+        title: "Ended Listing",
+        description: "Ended details",
+        location: "Austin, TX",
+        category: "other",
+        condition: "good",
+        status: "ended",
+        startingBidCents: 18000,
+        currentPriceCents: 18000,
+        minimumNextBidCents: 18000,
+        canPlaceBid: false,
+      }),
+    );
 
     const { default: ListingDetailPage } = await import(
       "@/app/listings/[id]/page"
@@ -290,5 +301,53 @@ describe("Listing detail page", () => {
     await expect(
       ListingDetailPage({ params: Promise.resolve({ id: "listing-1" }) }),
     ).rejects.toThrow("not-found");
+  });
+
+  it("replaces seller controls with auction activity after the first bid", async () => {
+    const session = createMockSession({
+      user: {
+        id: "seller-1",
+        name: "Seller One",
+        email: "seller-one@example.test",
+        emailVerified: true,
+        createdAt: new Date("2026-03-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-21T00:00:00.000Z"),
+        image: null,
+      },
+    });
+
+    hoisted.getSession.mockResolvedValue(session);
+    hoisted.getListingDetailForViewer.mockResolvedValue(
+      createListingDetail({
+        bidCount: 1,
+        currentBidCents: 18100,
+        currentPriceCents: 18100,
+        minimumNextBidCents: 18200,
+        highestBidderId: "buyer-1",
+        bidHistory: [
+          {
+            id: "bid-1",
+            bidderId: "buyer-1",
+            bidderName: "Buyer One",
+            amountCents: 18100,
+            createdAt: new Date("2026-03-21T12:00:00.000Z"),
+          },
+        ],
+      }),
+    );
+
+    const { default: ListingDetailPage } = await import(
+      "@/app/listings/[id]/page"
+    );
+
+    render(
+      await ListingDetailPage({ params: Promise.resolve({ id: "listing-1" }) }),
+    );
+
+    expect(screen.getByText("Auction Activity")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Publish" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Buyer One")).toHaveLength(2);
   });
 });

@@ -304,8 +304,6 @@ Objective: deliver the first complete seller listing flow, including schema, see
 
 Status: Accepted on 2026-03-25
 
-Detailed execution plan: [tasks/TODO.md](./TODO.md)
-
 ### Sub-Phases
 
 - `1A` Schema, seed data, `/listings`, and `/dashboard/listings`
@@ -423,8 +421,6 @@ Objective: improve public browse discovery and seller listing navigation with ri
 
 Status: Accepted on 2026-03-29
 
-Detailed execution plan: [tasks/TODO.md](./TODO.md)
-
 ### Sub-Phases
 
 - `3A` Seed data and status tabs
@@ -475,51 +471,73 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
 Objective: allow authenticated users to place bids and observe auction state updates live.
 
-### Scope
+Status: Approved on 2026-03-31. Implementation pending.
 
-- Add bid entry on listing detail pages.
-- Persist bids transactionally.
-- Update cached current bid and bid count.
-- Show bid history summary.
-- Add live updates for new highest bids and auction state changes.
+Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
-### Bidding Rules
+### Sub-Phases
 
-- Only authenticated non-seller users can bid.
-- Listing must be active and not yet ended.
-- Bid amount must be at least current required minimum.
-- Minimum increments are tiered based on the current highest bid.
-- Rejected bids return clear user-facing messaging.
+- `4A` Bid model, bid form UI, and bid history
+- `4B` Ably setup and listing channel
+- `4C` Live listing cards
+- `4D` Outbid toast notification
 
-### Real-Time Design
+### Phase 4 Decisions
 
-- Primary: Ably channel scoped to a listing.
-- Events:
-  - bid accepted
-  - listing outbid state changed
-  - auction ended
-- Fallback: short polling if Ably is unavailable.
+- Realtime uses Ably over websockets with token auth.
+- The server-side Ably secret is `ABLY_API_KEY` and must never be exposed to the browser.
+- Browser clients authenticate to Ably through a server-issued token endpoint/route.
+- No browser tab may hold more than one Ably connection.
+- Authenticated users keep a single global connection while authenticated.
+- Guests connect only on `/listings` and `/listings/[id]`, and disconnect when they leave those routes.
+- Guests may subscribe only to `listing:*`; authenticated users may subscribe to `listing:*` and `user:{id}`.
+- Phase 4 does not include polling fallback; normal refresh/navigation is the temporary fallback if realtime is unavailable.
+- Outbid notifications are realtime-only toast notifications in Phase 4; DB-backed notifications remain Phase 5 work.
+- Listings add cached `currentBidCents` and `bidCount`, and current-price displays must use `currentBidCents ?? startingBidCents`.
+- Bid increments are locked to:
+  - `< $100`: `+$1`
+  - `$100 - $499.99`: `+$5`
+  - `$500 - $999.99`: `+$10`
+  - `$1,000 - $4,999.99`: `+$25`
+  - `$5,000+`: `+$50`
+- Realtime event contracts are locked to:
+  - `listing:{id}` event `bid.placed`
+  - `user:{id}` event `auction.outbid`
+- Seller controls remain available only while `bidCount === 0`.
+
+### Summary Scope
+
+- Add bid persistence with transactional listing-cache updates.
+- Replace the Phase 1 buyer placeholder on `/listings/[id]` with a real bid form.
+- Add bid history to the listing detail page.
+- Add a shared Ably connection strategy for listing detail pages, listing cards, and authenticated outbid toasts.
+- Add live listing-card updates and authenticated outbid toast notifications.
 
 ### Acceptance Criteria
 
-- Authenticated buyer can place a valid bid and see the state update.
-- Invalid bids are rejected without corrupting listing state.
-- Concurrent bid attempts resolve correctly with a single accepted ordering.
-- Users viewing an active listing receive timely updates when new bids are placed.
+- `4A`: authenticated non-seller users can place valid bids, invalid bids are rejected clearly, bid history renders newest-first, and seller controls disappear after the first bid.
+- `4B`: listing detail pages receive `bid.placed` updates through the shared Ably connection and update pricing, history, bid status, and seller lock state without manual refresh.
+- `4C`: listing cards update current price and bid count live without opening per-card Ably connections.
+- `4D`: authenticated outbid users receive a deduped toast with a link back to the listing from any page.
 
 ### Test Requirements
 
-- Unit tests for bid validation, minimum increment logic, and bid state projection.
-- Integration tests for valid bid, invalid bid, seller self-bid rejection, ended-auction rejection, and concurrent bid ordering.
-- 100% integration coverage for bid placement success and failure workflows.
+- Unit tests for bid validation, tiered increment logic, minimum-next-bid projection, viewer bid status projection, token capability generation, and route-to-connection policy.
+- Integration and client tests for valid bid placement, invalid bid rejection, seller self-bid rejection, expired/inactive rejection, listing-detail realtime updates, live card updates, and outbid toast delivery.
+- 100% integration coverage for bid placement success and failure workflows before Phase 4 acceptance.
 
 ### Phase 4 Tracker
 
-- [ ] Detailed phase spec approved
-- [ ] Bid rule contract finalized
+- [x] Detailed phase spec approved
+- [x] `tasks/TODO.md` execution plan finalized
+- [x] Bid rule contract finalized
+- [x] Ably connection contract finalized
+- [x] Realtime event contract finalized
 - [ ] Bid persistence transaction implemented
 - [ ] Listing bid UI implemented
 - [ ] Live update transport implemented
+- [ ] Live listing cards implemented
+- [ ] Outbid toast notifications implemented
 - [ ] Unit tests completed
 - [ ] Integration tests completed
 - [ ] 80%+ coverage met

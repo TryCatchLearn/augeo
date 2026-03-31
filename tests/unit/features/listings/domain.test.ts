@@ -5,13 +5,17 @@ import {
   canAddListingImage,
   canDeleteListing,
   canDeleteListingImage,
+  canPlaceBid,
   canPublishListing,
   canReceiveBids,
   canReturnToDraft,
   canViewListingDetail,
+  getBidIncrementCents,
+  getCurrentPriceCents,
+  getMinimumNextBidCents,
   getNextMainImageIdAfterDelete,
-  getPlaceholderPricing,
   getPublishedStatus,
+  getViewerBidStatus,
   isListingStatus,
   listingConditions,
   listingStatuses,
@@ -155,12 +159,93 @@ describe("listing status rules", () => {
     );
   });
 
-  it("returns Phase 1 placeholder pricing from the starting bid", () => {
-    expect(getPlaceholderPricing(27500)).toEqual({
-      currentBidCents: 27500,
-      minimumBidCents: 27500,
-      bidCount: 0,
-    });
+  it("maps the locked bid increment ladder", () => {
+    expect(getBidIncrementCents(9_999)).toBe(100);
+    expect(getBidIncrementCents(10_000)).toBe(500);
+    expect(getBidIncrementCents(50_000)).toBe(1_000);
+    expect(getBidIncrementCents(100_000)).toBe(2_500);
+    expect(getBidIncrementCents(500_000)).toBe(5_000);
+  });
+
+  it("derives current and minimum-next bid values from persisted state", () => {
+    expect(getCurrentPriceCents(27_500, null)).toBe(27_500);
+    expect(getCurrentPriceCents(27_500, 31_000)).toBe(31_000);
+    expect(getMinimumNextBidCents(27_500, null)).toBe(27_500);
+    expect(getMinimumNextBidCents(27_500, 31_000)).toBe(31_500);
+  });
+
+  it("projects the viewer bid status from highest-bidder and history state", () => {
+    expect(
+      getViewerBidStatus({
+        viewerId: "buyer-1",
+        highestBidderId: "buyer-1",
+        hasViewerBid: true,
+      }),
+    ).toBe("highest");
+    expect(
+      getViewerBidStatus({
+        viewerId: "buyer-1",
+        highestBidderId: "buyer-2",
+        hasViewerBid: true,
+      }),
+    ).toBe("outbid");
+    expect(
+      getViewerBidStatus({
+        viewerId: "buyer-1",
+        highestBidderId: "buyer-2",
+        hasViewerBid: false,
+      }),
+    ).toBe("none");
+  });
+
+  it("checks bid eligibility for auth, seller ownership, status, and expiration", () => {
+    const now = new Date("2026-03-21T12:00:00.000Z");
+
+    expect(
+      canPlaceBid({
+        sellerId: "seller-1",
+        viewerId: "buyer-1",
+        status: "active",
+        endsAt: new Date("2026-03-21T12:05:00.000Z"),
+        now,
+      }),
+    ).toBe(true);
+    expect(
+      canPlaceBid({
+        sellerId: "seller-1",
+        viewerId: null,
+        status: "active",
+        endsAt: new Date("2026-03-21T12:05:00.000Z"),
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      canPlaceBid({
+        sellerId: "seller-1",
+        viewerId: "seller-1",
+        status: "active",
+        endsAt: new Date("2026-03-21T12:05:00.000Z"),
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      canPlaceBid({
+        sellerId: "seller-1",
+        viewerId: "buyer-1",
+        status: "scheduled",
+        endsAt: new Date("2026-03-21T12:05:00.000Z"),
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      canPlaceBid({
+        sellerId: "seller-1",
+        viewerId: "buyer-1",
+        status: "active",
+        endsAt: new Date("2026-03-21T11:59:00.000Z"),
+        now,
+      }),
+    ).toBe(false);
   });
 
   it("returns status-aware time metadata for detail pages", () => {

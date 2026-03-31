@@ -47,6 +47,7 @@ describe("ListingSellerControls", () => {
     category: "electronics",
     condition: "good",
     startingBidCents: 15000,
+    bidCount: 0,
     reservePriceCents: null,
     startsAt: null,
     endsAt: new Date("2026-03-30T12:00:00.000Z"),

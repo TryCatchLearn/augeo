@@ -4,6 +4,10 @@ export function dollarsToCents(value: number) {
   return Math.round(value * 100);
 }
 
+export function centsToDollars(value: number) {
+  return value / 100;
+}
+
 export function localDateTimeToIsoString(value: string) {
   return new Date(value).toISOString();
 }
@@ -28,6 +32,15 @@ export function formatListingPrice(cents: number) {
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(cents / 100);
+}
+
+export function formatBidTimestamp(value: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
 }
 
 export function formatTimeRemaining(endsAt: Date, now = new Date()) {

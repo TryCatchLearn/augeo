@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => ({
+  BidActionError: class BidActionError extends Error {},
   requireAuthenticatedSession: vi.fn(),
   revalidatePath: vi.fn(),
   createListingImageUploadSignature: vi.fn(),
@@ -12,6 +13,7 @@ const hoisted = vi.hoisted(() => ({
   updateListingStatus: vi.fn(),
   deleteDraftListingRecords: vi.fn(),
   insertListingImage: vi.fn(),
+  placeBidForListing: vi.fn(),
   setMainListingImage: vi.fn(),
   deleteListingImageRecord: vi.fn(),
   incrementListingDescriptionGenerationCount: vi.fn(),
@@ -44,11 +46,13 @@ vi.mock("@/server/ai", async () => {
 });
 
 vi.mock("@/features/listings/mutations", () => ({
+  BidActionError: hoisted.BidActionError,
   insertDraftWithMainImage: hoisted.insertDraftWithMainImage,
   updateDraftListing: hoisted.updateDraftListing,
   updateListingStatus: hoisted.updateListingStatus,
   deleteDraftListingRecords: hoisted.deleteDraftListingRecords,
   insertListingImage: hoisted.insertListingImage,
+  placeBidForListing: hoisted.placeBidForListing,
   setMainListingImage: hoisted.setMainListingImage,
   deleteListingImageRecord: hoisted.deleteListingImageRecord,
   incrementListingDescriptionGenerationCount:
@@ -158,6 +162,7 @@ describe("listing server actions", () => {
       sellerId: "seller-1",
       status: "draft",
       startsAt: null,
+      bidCount: 0,
       aiDescriptionGenerationCount: 0,
     });
     hoisted.updateDraftListing.mockResolvedValue({ id: "listing-1" });
@@ -200,6 +205,7 @@ describe("listing server actions", () => {
       sellerId: "seller-1",
       status: "draft",
       startsAt: null,
+      bidCount: 0,
       aiDescriptionGenerationCount: 0,
     });
     hoisted.updateListingStatus.mockResolvedValue({
@@ -226,6 +232,7 @@ describe("listing server actions", () => {
       sellerId: "seller-1",
       status: "draft",
       startsAt: null,
+      bidCount: 0,
       aiDescriptionGenerationCount: 0,
     });
     hoisted.listListingImageAssets.mockResolvedValue([
@@ -252,6 +259,7 @@ describe("listing server actions", () => {
       sellerId: "seller-1",
       status: "draft",
       startsAt: null,
+      bidCount: 0,
       aiDescriptionGenerationCount: 0,
     });
     hoisted.listListingImageAssets.mockResolvedValue([
@@ -287,6 +295,7 @@ describe("listing server actions", () => {
       sellerId: "seller-1",
       status: "draft",
       startsAt: null,
+      bidCount: 0,
       aiDescriptionGenerationCount: 0,
     });
     hoisted.listListingImageAssets.mockResolvedValue([
@@ -320,6 +329,7 @@ describe("listing server actions", () => {
       sellerId: "seller-1",
       status: "draft",
       startsAt: null,
+      bidCount: 0,
       aiDescriptionGenerationCount: 0,
     });
     hoisted.incrementListingDescriptionGenerationCount.mockResolvedValue({
@@ -348,5 +358,48 @@ describe("listing server actions", () => {
         .join(" "),
       remainingRuns: 9,
     });
+  });
+
+  it("returns an inline error for unauthenticated bid attempts", async () => {
+    hoisted.requireAuthenticatedSession.mockRejectedValue(
+      new Error("Unauthorized"),
+    );
+    const { placeBidAction } = await loadActions();
+
+    await expect(
+      placeBidAction({
+        listingId: "listing-1",
+        amountCents: 20_000,
+      }),
+    ).resolves.toEqual({
+      status: "error",
+      errorMessage: "Sign in to place a bid.",
+    });
+  });
+
+  it("places bids and revalidates listing paths", async () => {
+    hoisted.requireAuthenticatedSession.mockResolvedValue(session);
+    hoisted.placeBidForListing.mockResolvedValue({
+      listingId: "listing-1",
+      currentBidCents: 20_000,
+    });
+    const { placeBidAction } = await loadActions();
+
+    await expect(
+      placeBidAction({
+        listingId: "listing-1",
+        amountCents: 20_000,
+      }),
+    ).resolves.toEqual({
+      status: "success",
+      listingId: "listing-1",
+    });
+
+    expect(hoisted.placeBidForListing).toHaveBeenCalledWith({
+      listingId: "listing-1",
+      amountCents: 20_000,
+      bidderId: "seller-1",
+    });
+    expectListingRevalidation("listing-1");
   });
 });

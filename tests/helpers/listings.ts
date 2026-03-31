@@ -22,6 +22,7 @@ export function createListingCardData(
     title: "Public Camera",
     status: "active",
     startingBidCents: 25_000,
+    currentPriceCents: 25_000,
     bidCount: 0,
     sellerName: "Seller One",
     endsAt: new Date("2026-03-21T18:00:00.000Z"),
