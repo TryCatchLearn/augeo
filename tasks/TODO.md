@@ -328,7 +328,7 @@ Status: Completed
 
 ## 4D - Outbid Toast Notification
 
-Status: Not started
+Status: Completed
 
 ### Deliverables
 

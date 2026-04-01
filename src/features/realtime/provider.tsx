@@ -6,6 +6,7 @@ import {
   type RealtimeChannel,
   type RealtimeClient,
 } from "ably";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   createContext,
@@ -16,9 +17,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
+import { formatListingPrice } from "@/features/listings/utils";
 import {
   ABLY_LISTING_EVENT_NAME,
+  ABLY_OUTBID_EVENT_NAME,
+  type AuctionOutbidEvent,
   getListingChannelName,
+  getUserChannelName,
   type ListingBidPlacedEvent,
 } from "@/features/realtime/events";
 import { getRealtimeConnectionMode } from "@/features/realtime/policy";
@@ -55,6 +61,7 @@ export function RealtimeProvider({
   const [client, setClient] = useState<RealtimeClient | null>(null);
   const clientRef = useRef<RealtimeClient | null>(null);
   const modeRef = useRef<ReturnType<typeof getRealtimeConnectionMode>>("none");
+  const seenOutbidEventsRef = useRef(new Set<string>());
 
   useEffect(() => {
     const nextMode = getRealtimeConnectionMode({
@@ -98,6 +105,66 @@ export function RealtimeProvider({
       clientRef.current = null;
     };
   }, []);
+
+  const showOutbidToast = useEffectEvent((event: AuctionOutbidEvent) => {
+    const dedupeKey = `${event.listingId}:${event.acceptedBidId}`;
+
+    if (seenOutbidEventsRef.current.has(dedupeKey)) {
+      return;
+    }
+
+    seenOutbidEventsRef.current.add(dedupeKey);
+
+    toast.custom(
+      () => (
+        <div className="w-full max-w-sm rounded-3xl border border-border/70 bg-background/95 p-4 shadow-xl backdrop-blur">
+          <p className="text-sm font-medium tracking-[0.18em] uppercase text-primary">
+            You&apos;ve been outbid
+          </p>
+          <p className="mt-2 text-base font-semibold text-foreground">
+            {event.listingTitle}
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            New current bid {formatListingPrice(event.currentBidCents)} across{" "}
+            {event.bidCount} bid{event.bidCount === 1 ? "" : "s"}.
+          </p>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">
+              Next bid {formatListingPrice(event.minimumNextBidCents)}
+            </span>
+            <Link
+              href={event.listingUrl}
+              className="rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
+            >
+              View listing
+            </Link>
+          </div>
+        </div>
+      ),
+      {
+        id: dedupeKey,
+      },
+    );
+  });
+
+  useEffect(() => {
+    if (!client || !viewerId) {
+      return;
+    }
+
+    const channel: RealtimeChannel = client.channels.get(
+      getUserChannelName(viewerId),
+    );
+    const listener = (message: InboundMessage) => {
+      showOutbidToast(message.data as AuctionOutbidEvent);
+    };
+
+    void channel.subscribe(ABLY_OUTBID_EVENT_NAME, listener);
+
+    return () => {
+      channel.unsubscribe(ABLY_OUTBID_EVENT_NAME, listener);
+    };
+  }, [client, showOutbidToast, viewerId]);
 
   const value = useMemo(
     () => ({

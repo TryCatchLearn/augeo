@@ -13,6 +13,7 @@ import {
 const hoisted = vi.hoisted(() => ({
   requireAuthenticatedSession: vi.fn(),
   revalidatePath: vi.fn(),
+  publishAuctionOutbid: vi.fn(),
   publishListingBidPlaced: vi.fn(),
   db: null as TestDatabase["db"] | null,
 }));
@@ -26,6 +27,7 @@ vi.mock("@/features/auth/session", () => ({
 }));
 
 vi.mock("@/server/ably", () => ({
+  publishAuctionOutbid: hoisted.publishAuctionOutbid,
   publishListingBidPlaced: hoisted.publishListingBidPlaced,
 }));
 
@@ -43,6 +45,7 @@ describe("placeBidAction", () => {
     hoisted.db = testDatabase.db;
     hoisted.revalidatePath.mockReset();
     hoisted.requireAuthenticatedSession.mockReset();
+    hoisted.publishAuctionOutbid.mockReset();
     hoisted.publishListingBidPlaced.mockReset();
   });
 
@@ -146,6 +149,15 @@ describe("placeBidAction", () => {
 
     expect(updatedListing?.currentBidCents).toBe(10_500);
     expect(updatedListing?.bidCount).toBe(2);
+    expect(hoisted.publishAuctionOutbid).toHaveBeenCalledWith(buyerOne.id, {
+      acceptedBidId: expect.any(String),
+      listingId,
+      listingTitle: "Auction Camera",
+      currentBidCents: 10_500,
+      minimumNextBidCents: 11_000,
+      bidCount: 2,
+      listingUrl: `/listings/${listingId}`,
+    });
   });
 
   it("allows the highest bidder to raise their own bid", async () => {
@@ -161,6 +173,7 @@ describe("placeBidAction", () => {
       status: "success",
       listingId,
     });
+    expect(hoisted.publishAuctionOutbid).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated bids", async () => {
@@ -233,5 +246,17 @@ describe("placeBidAction", () => {
       status: "error",
       errorMessage: "Bid must be at least $105.00.",
     });
+  });
+
+  it("does not publish an outbid event for the first accepted bid", async () => {
+    const { listingId } = await seedListing();
+    const buyer = await insertUser(testDatabase.db, {
+      name: "Buyer One",
+      email: "buyer-one@example.test",
+    });
+
+    await placeBidAs(buyer.id, 10_000, listingId);
+
+    expect(hoisted.publishAuctionOutbid).not.toHaveBeenCalled();
   });
 });

@@ -537,7 +537,7 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [ ] Listing bid UI implemented
 - [x] Live update transport implemented
 - [x] Live listing cards implemented
-- [ ] Outbid toast notifications implemented
+- [x] Outbid toast notifications implemented
 - [ ] Unit tests completed
 - [ ] Integration tests completed
 - [ ] 80%+ coverage met

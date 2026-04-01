@@ -1,7 +1,10 @@
 import { type CapabilityOp, Rest } from "ably";
 import {
   ABLY_LISTING_EVENT_NAME,
+  ABLY_OUTBID_EVENT_NAME,
+  type AuctionOutbidEvent,
   getListingChannelName,
+  getUserChannelName,
   type ListingBidPlacedEvent,
 } from "@/features/realtime/events";
 import { getRequiredEnv } from "@/lib/env";
@@ -48,4 +51,14 @@ export async function publishListingBidPlaced(payload: ListingBidPlacedEvent) {
   const channel = ably.channels.get(getListingChannelName(payload.listingId));
 
   await channel.publish(ABLY_LISTING_EVENT_NAME, payload);
+}
+
+export async function publishAuctionOutbid(
+  userId: string,
+  payload: AuctionOutbidEvent,
+) {
+  const ably = getAblyRestClient();
+  const channel = ably.channels.get(getUserChannelName(userId));
+
+  await channel.publish(ABLY_OUTBID_EVENT_NAME, payload);
 }

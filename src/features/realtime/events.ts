@@ -23,3 +23,13 @@ export type ListingBidPlacedEvent = {
     createdAt: string;
   };
 };
+
+export type AuctionOutbidEvent = {
+  acceptedBidId: string;
+  listingId: string;
+  listingTitle: string;
+  currentBidCents: number;
+  minimumNextBidCents: number;
+  bidCount: number;
+  listingUrl: string;
+};

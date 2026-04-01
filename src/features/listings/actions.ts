@@ -42,8 +42,11 @@ import {
   saveDraftListingSchema,
   validateEnhancedDescription,
 } from "@/features/listings/schema";
-import type { ListingBidPlacedEvent } from "@/features/realtime/events";
-import { publishListingBidPlaced } from "@/server/ably";
+import type {
+  AuctionOutbidEvent,
+  ListingBidPlacedEvent,
+} from "@/features/realtime/events";
+import { publishAuctionOutbid, publishListingBidPlaced } from "@/server/ably";
 import {
   AiGenerationError,
   generateSmartListingFromImage,
@@ -240,6 +243,27 @@ export async function placeBidAction(input: unknown) {
       await publishListingBidPlaced(event);
     } catch (error) {
       console.error("Failed to publish listing bid update.", error);
+    }
+
+    if (
+      result.previousHighestBidderId &&
+      result.previousHighestBidderId !== result.highestBidderId
+    ) {
+      try {
+        const outbidEvent: AuctionOutbidEvent = {
+          acceptedBidId: result.bid.id,
+          listingId: result.listingId,
+          listingTitle: result.listingTitle,
+          currentBidCents: result.currentBidCents,
+          minimumNextBidCents: result.minimumNextBidCents,
+          bidCount: result.bidCount,
+          listingUrl: `/listings/${result.listingId}`,
+        };
+
+        await publishAuctionOutbid(result.previousHighestBidderId, outbidEvent);
+      } catch (error) {
+        console.error("Failed to publish outbid update.", error);
+      }
     }
 
     revalidateListingPaths(result.listingId);

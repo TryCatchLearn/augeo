@@ -1,5 +1,6 @@
 "use client";
 
+import { Toaster } from "sonner";
 import { RealtimeProvider } from "@/features/realtime/provider";
 
 type AppProvidersProps = {
@@ -8,5 +9,10 @@ type AppProvidersProps = {
 };
 
 export function AppProviders({ children, viewerId }: AppProvidersProps) {
-  return <RealtimeProvider viewerId={viewerId}>{children}</RealtimeProvider>;
+  return (
+    <RealtimeProvider viewerId={viewerId}>
+      {children}
+      <Toaster richColors position="top-right" />
+    </RealtimeProvider>
+  );
 }
