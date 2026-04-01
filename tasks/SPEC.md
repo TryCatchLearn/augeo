@@ -256,7 +256,7 @@ Every phase follows the same lifecycle:
 - [x] Phase 1 - Listing Creation and Management
 - [ ] Phase 2 - AI Features
 - [x] Phase 3 - Browse and Search Listings
-- [ ] Phase 4 - Bidding and Real-Time Updates
+- [x] Phase 4 - Bidding and Real-Time Updates
 - [ ] Phase 5 - Auction Finalization and Notifications
 - [ ] Phase 6 - User Dashboard
 - [ ] Phase 7 - Polish, CI, Prod DB switch and publishing
@@ -471,7 +471,7 @@ Status: Accepted on 2026-03-29
 
 Objective: allow authenticated users to place bids and observe auction state updates live.
 
-Status: Approved on 2026-03-31. Implementation pending.
+Status: Accepted on 2026-04-01
 
 Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
@@ -533,16 +533,16 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 - [x] Bid rule contract finalized
 - [x] Ably connection contract finalized
 - [x] Realtime event contract finalized
-- [ ] Bid persistence transaction implemented
-- [ ] Listing bid UI implemented
+- [x] Bid persistence transaction implemented
+- [x] Listing bid UI implemented
 - [x] Live update transport implemented
 - [x] Live listing cards implemented
 - [x] Outbid toast notifications implemented
-- [ ] Unit tests completed
-- [ ] Integration tests completed
-- [ ] 80%+ coverage met
-- [ ] 100% critical-path integration coverage met
-- [ ] Phase accepted
+- [x] Unit tests completed
+- [x] Integration tests completed
+- [x] 80%+ coverage met
+- [x] 100% critical-path integration coverage met
+- [x] Phase accepted
 
 ## Phase 5 - Auction Finalization and Notifications
 

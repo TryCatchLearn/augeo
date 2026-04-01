@@ -107,6 +107,7 @@ export const listing = sqliteTable(
     startingBidCents: integer("starting_bid_cents").notNull(),
     currentBidCents: integer("current_bid_cents"),
     bidCount: integer("bid_count").default(0).notNull(),
+    version: integer("version").default(0).notNull(),
     reservePriceCents: integer("reserve_price_cents"),
     aiDescriptionGenerationCount: integer("ai_description_generation_count")
       .default(0)

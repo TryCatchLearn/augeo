@@ -17,6 +17,7 @@ import type {
 } from "@/features/listings/schema";
 
 type Database = LibSQLDatabase<typeof schema>;
+type BidStateDatabase = Pick<Database, "select">;
 
 async function resolveDatabase(database?: Database) {
   if (database) {
@@ -220,6 +221,182 @@ export async function incrementListingDescriptionGenerationCount(
 }
 
 export class BidActionError extends Error {}
+class BidConcurrencyConflictError extends Error {}
+
+type PlaceBidTestControls = {
+  afterBidStateRead?: () => Promise<void>;
+};
+
+type ListingBidState = {
+  id: string;
+  title: string;
+  sellerId: string;
+  status: ListingStatus;
+  endsAt: Date;
+  startingBidCents: number;
+  currentBidCents: number | null;
+  bidCount: number;
+  version: number;
+};
+
+type HighestBidRecord = {
+  id: string;
+  bidderId: string;
+  bidderName: string;
+  amountCents: number;
+  createdAt: Date;
+};
+
+async function getListingBidState(
+  database: BidStateDatabase,
+  listingId: string,
+) {
+  const [listingRecord] = await database
+    .select({
+      id: listing.id,
+      title: listing.title,
+      sellerId: listing.sellerId,
+      status: listing.status,
+      endsAt: listing.endsAt,
+      startingBidCents: listing.startingBidCents,
+      currentBidCents: listing.currentBidCents,
+      bidCount: listing.bidCount,
+      version: listing.version,
+    })
+    .from(listing)
+    .where(eq(listing.id, listingId));
+
+  if (!listingRecord) {
+    return null;
+  }
+
+  const [highestBid] = await database
+    .select({
+      id: bid.id,
+      bidderId: bid.bidderId,
+      bidderName: user.name,
+      amountCents: bid.amountCents,
+      createdAt: bid.createdAt,
+    })
+    .from(bid)
+    .innerJoin(user, eq(bid.bidderId, user.id))
+    .where(eq(bid.listingId, listingId))
+    .orderBy(desc(bid.amountCents), desc(bid.createdAt))
+    .limit(1);
+
+  return {
+    listingRecord,
+    highestBid: highestBid ?? null,
+  };
+}
+
+function validateBidAttempt(
+  input: {
+    bidderId: string;
+    amountCents: number;
+    now: Date;
+  },
+  listingRecord: ListingBidState,
+  highestBid: HighestBidRecord | null,
+) {
+  if (listingRecord.sellerId === input.bidderId) {
+    throw new BidActionError("You can't bid on your own listing.");
+  }
+
+  if (!canReceiveBids(listingRecord.status, listingRecord.endsAt, input.now)) {
+    if (listingRecord.status !== "active") {
+      throw new BidActionError("Only active listings can accept bids.");
+    }
+
+    throw new BidActionError("This auction has already ended.");
+  }
+
+  const minimumNextBidCents = getMinimumNextBidCents(
+    listingRecord.startingBidCents,
+    highestBid?.amountCents ?? listingRecord.currentBidCents,
+  );
+
+  if (input.amountCents < minimumNextBidCents) {
+    throw new BidActionError(
+      `Bid must be at least ${minimumNextBidCents} cents.`,
+    );
+  }
+
+  return {
+    minimumNextBidCents,
+  };
+}
+
+async function throwBidConflictError(
+  input: {
+    listingId: string;
+    now: Date;
+    expectedVersion: number | null;
+  },
+  database: Database,
+) {
+  let latestBidState = await getListingBidState(database, input.listingId);
+
+  if (input.expectedVersion !== null) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (
+        !latestBidState ||
+        latestBidState.listingRecord.version !== input.expectedVersion
+      ) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      latestBidState = await getListingBidState(database, input.listingId);
+    }
+  }
+
+  if (!latestBidState) {
+    throw new BidActionError("This listing is no longer available.");
+  }
+
+  if (
+    !canReceiveBids(
+      latestBidState.listingRecord.status,
+      latestBidState.listingRecord.endsAt,
+      input.now,
+    )
+  ) {
+    if (latestBidState.listingRecord.status !== "active") {
+      throw new BidActionError("Only active listings can accept bids.");
+    }
+
+    throw new BidActionError("This auction has already ended.");
+  }
+
+  throw new BidActionError(
+    `Bid must be at least ${getMinimumNextBidCents(
+      latestBidState.listingRecord.startingBidCents,
+      latestBidState.highestBid?.amountCents ??
+        latestBidState.listingRecord.currentBidCents,
+    )} cents.`,
+  );
+}
+
+function isBidConflictError(error: unknown) {
+  if (error instanceof BidConcurrencyConflictError) {
+    return true;
+  }
+
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  if ("code" in error && error.code === "SQLITE_BUSY") {
+    return true;
+  }
+
+  if ("cause" in error) {
+    return isBidConflictError(error.cause);
+  }
+
+  return false;
+}
 
 export async function placeBidForListing(
   input: PlaceBidInput & {
@@ -227,109 +404,103 @@ export async function placeBidForListing(
     now?: Date;
   },
   database?: Database,
+  testControls?: PlaceBidTestControls,
 ) {
   const resolvedDatabase = await resolveDatabase(database);
   const now = input.now ?? new Date();
+  const bidState = await getListingBidState(resolvedDatabase, input.listingId);
 
-  return resolvedDatabase.transaction(async (tx) => {
-    const [listingRecord] = await tx
-      .select({
-        id: listing.id,
-        title: listing.title,
-        sellerId: listing.sellerId,
-        status: listing.status,
-        endsAt: listing.endsAt,
-        startingBidCents: listing.startingBidCents,
-        currentBidCents: listing.currentBidCents,
-        bidCount: listing.bidCount,
-      })
-      .from(listing)
-      .where(eq(listing.id, input.listingId));
+  if (!bidState) {
+    throw new BidActionError("This listing is no longer available.");
+  }
 
-    if (!listingRecord) {
-      throw new BidActionError("This listing is no longer available.");
-    }
+  const { listingRecord, highestBid } = bidState;
+  const expectedVersion = listingRecord.version;
 
-    if (listingRecord.sellerId === input.bidderId) {
-      throw new BidActionError("You can't bid on your own listing.");
-    }
+  validateBidAttempt(
+    {
+      bidderId: input.bidderId,
+      amountCents: input.amountCents,
+      now,
+    },
+    listingRecord,
+    highestBid,
+  );
 
-    if (!canReceiveBids(listingRecord.status, listingRecord.endsAt, now)) {
-      if (listingRecord.status !== "active") {
-        throw new BidActionError("Only active listings can accept bids.");
+  await testControls?.afterBidStateRead?.();
+
+  try {
+    return await resolvedDatabase.transaction(async (tx) => {
+      const updatedListings = await tx
+        .update(listing)
+        .set({
+          currentBidCents: input.amountCents,
+          bidCount: sql`${listing.bidCount} + 1`,
+          version: sql`${listing.version} + 1`,
+        })
+        .where(
+          and(
+            eq(listing.id, input.listingId),
+            eq(listing.version, expectedVersion),
+          ),
+        )
+        .returning({
+          id: listing.id,
+        });
+
+      if (updatedListings.length === 0) {
+        throw new BidConcurrencyConflictError();
       }
 
-      throw new BidActionError("This auction has already ended.");
-    }
+      const bidId = randomUUID();
 
-    const [highestBid] = await tx
-      .select({
-        id: bid.id,
-        bidderId: bid.bidderId,
-        bidderName: user.name,
-        amountCents: bid.amountCents,
-        createdAt: bid.createdAt,
-      })
-      .from(bid)
-      .innerJoin(user, eq(bid.bidderId, user.id))
-      .where(eq(bid.listingId, input.listingId))
-      .orderBy(desc(bid.amountCents), desc(bid.createdAt))
-      .limit(1);
+      await tx.insert(bid).values({
+        id: bidId,
+        listingId: input.listingId,
+        bidderId: input.bidderId,
+        amountCents: input.amountCents,
+        createdAt: now,
+      });
 
-    const minimumNextBidCents = getMinimumNextBidCents(
-      listingRecord.startingBidCents,
-      highestBid?.amountCents ?? listingRecord.currentBidCents,
-    );
+      const [placedBid] = await tx
+        .select({
+          id: bid.id,
+          listingId: bid.listingId,
+          bidderId: bid.bidderId,
+          bidderName: user.name,
+          amountCents: bid.amountCents,
+          createdAt: bid.createdAt,
+        })
+        .from(bid)
+        .innerJoin(user, eq(bid.bidderId, user.id))
+        .where(eq(bid.id, bidId));
 
-    if (input.amountCents < minimumNextBidCents) {
-      throw new BidActionError(
-        `Bid must be at least ${minimumNextBidCents} cents.`,
+      return {
+        listingId: input.listingId,
+        listingTitle: listingRecord.title,
+        currentBidCents: input.amountCents,
+        bidCount: listingRecord.bidCount + 1,
+        minimumNextBidCents: getMinimumNextBidCents(
+          listingRecord.startingBidCents,
+          input.amountCents,
+        ),
+        highestBidderId: input.bidderId,
+        previousHighestBidderId: highestBid?.bidderId ?? null,
+        bid: placedBid,
+      };
+    });
+  } catch (error) {
+    if (isBidConflictError(error)) {
+      await throwBidConflictError(
+        {
+          listingId: input.listingId,
+          now,
+          expectedVersion,
+        },
+        resolvedDatabase,
       );
     }
 
-    const bidId = randomUUID();
-
-    await tx.insert(bid).values({
-      id: bidId,
-      listingId: input.listingId,
-      bidderId: input.bidderId,
-      amountCents: input.amountCents,
-      createdAt: now,
-    });
-
-    await tx
-      .update(listing)
-      .set({
-        currentBidCents: input.amountCents,
-        bidCount: sql`${listing.bidCount} + 1`,
-      })
-      .where(eq(listing.id, input.listingId));
-
-    const [placedBid] = await tx
-      .select({
-        id: bid.id,
-        listingId: bid.listingId,
-        bidderId: bid.bidderId,
-        bidderName: user.name,
-        amountCents: bid.amountCents,
-        createdAt: bid.createdAt,
-      })
-      .from(bid)
-      .innerJoin(user, eq(bid.bidderId, user.id))
-      .where(eq(bid.id, bidId));
-
-    return {
-      listingId: input.listingId,
-      listingTitle: listingRecord.title,
-      currentBidCents: input.amountCents,
-      bidCount: listingRecord.bidCount + 1,
-      minimumNextBidCents: getMinimumNextBidCents(
-        listingRecord.startingBidCents,
-        input.amountCents,
-      ),
-      highestBidderId: input.bidderId,
-      previousHighestBidderId: highestBid?.bidderId ?? null,
-      bid: placedBid,
-    };
-  });
+    throw error;
+  }
 }

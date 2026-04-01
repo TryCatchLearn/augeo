@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f269d57f-dadf-4a05-96d5-6086f4f5b945",
-  "prevId": "332a4d76-faa7-4144-beee-335cb74b7998",
+  "id": "71659347-06cb-4d3b-acdd-13981d6186bb",
+  "prevId": "f269d57f-dadf-4a05-96d5-6086f4f5b945",
   "tables": {
     "account": {
       "name": "account",
@@ -271,6 +271,14 @@
         },
         "bid_count": {
           "name": "bid_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "version": {
+          "name": "version",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

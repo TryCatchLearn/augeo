@@ -121,6 +121,7 @@ describe("placeBidAction", () => {
 
     expect(updatedListing?.currentBidCents).toBe(10_000);
     expect(updatedListing?.bidCount).toBe(1);
+    expect(updatedListing?.version).toBe(1);
     expect(placedBids).toHaveLength(1);
   });
 
@@ -149,6 +150,7 @@ describe("placeBidAction", () => {
 
     expect(updatedListing?.currentBidCents).toBe(10_500);
     expect(updatedListing?.bidCount).toBe(2);
+    expect(updatedListing?.version).toBe(2);
     expect(hoisted.publishAuctionOutbid).toHaveBeenCalledWith(buyerOne.id, {
       acceptedBidId: expect.any(String),
       listingId,
