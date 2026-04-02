@@ -7,8 +7,19 @@ import {
   isListingActivationEligible,
   isListingClosureEligible,
 } from "@/features/listings/domain";
-import type { ListingLifecycleChangedEvent } from "@/features/realtime/events";
-import { publishListingLifecycleChanged } from "@/server/ably";
+import {
+  createAuctionWonNotification,
+  createItemNotSoldNotification,
+  createItemSoldNotification,
+} from "@/features/notifications/mutations";
+import type {
+  ListingLifecycleChangedEvent,
+  NotificationCreatedEvent,
+} from "@/features/realtime/events";
+import {
+  publishListingLifecycleChanged,
+  publishNotificationCreated,
+} from "@/server/ably";
 
 type Database = LibSQLDatabase<typeof schema>;
 
@@ -76,8 +87,12 @@ export async function runAuctionLifecycle(
   const now = options.now ?? new Date();
   const database = await resolveDatabase(options.database);
   const summary = emptySummary();
-  const changedEvents = await database.transaction(async (tx) => {
-    const events: ListingLifecycleChangedEvent[] = [];
+  const transactionResult = await database.transaction(async (tx) => {
+    const listingEvents: ListingLifecycleChangedEvent[] = [];
+    const notificationEvents: Array<{
+      userId: string;
+      event: NotificationCreatedEvent;
+    }> = [];
 
     const activatedListings = await tx
       .update(listing)
@@ -114,7 +129,7 @@ export async function runAuctionLifecycle(
         continue;
       }
 
-      events.push(toLifecycleEvent(activatedListing));
+      listingEvents.push(toLifecycleEvent(activatedListing));
     }
 
     summary.activatedCount = activatedListings.length;
@@ -122,6 +137,8 @@ export async function runAuctionLifecycle(
     const listingsToClose = await tx
       .select({
         id: listing.id,
+        title: listing.title,
+        sellerId: listing.sellerId,
         endsAt: listing.endsAt,
         reservePriceCents: listing.reservePriceCents,
         currentBidCents: listing.currentBidCents,
@@ -186,30 +203,105 @@ export async function runAuctionLifecycle(
 
       summary.closedCount += 1;
 
-      if (closedListing.outcome === "sold") {
+      if (closedListing.outcome === "sold" && highestBid) {
         summary.soldCount += 1;
+
+        if (closedListing.winnerUserId) {
+          const winnerNotification = await createAuctionWonNotification(tx, {
+            userId: closedListing.winnerUserId,
+            listingId: listingToClose.id,
+            listingTitle: listingToClose.title,
+            finalBidCents: highestBid.amountCents,
+            createdAt: now,
+          });
+
+          if (winnerNotification) {
+            notificationEvents.push({
+              userId: closedListing.winnerUserId,
+              event: winnerNotification,
+            });
+          }
+        }
+
+        const sellerNotification = await createItemSoldNotification(tx, {
+          userId: listingToClose.sellerId,
+          listingId: listingToClose.id,
+          listingTitle: listingToClose.title,
+          finalBidCents: highestBid.amountCents,
+          createdAt: now,
+        });
+
+        if (sellerNotification) {
+          notificationEvents.push({
+            userId: listingToClose.sellerId,
+            event: sellerNotification,
+          });
+        }
       }
 
       if (closedListing.outcome === "unsold") {
         summary.unsoldCount += 1;
+
+        const sellerNotification = await createItemNotSoldNotification(tx, {
+          userId: listingToClose.sellerId,
+          listingId: listingToClose.id,
+          listingTitle: listingToClose.title,
+          outcome: "unsold",
+          createdAt: now,
+        });
+
+        if (sellerNotification) {
+          notificationEvents.push({
+            userId: listingToClose.sellerId,
+            event: sellerNotification,
+          });
+        }
       }
 
       if (closedListing.outcome === "reserve_not_met") {
         summary.reserveNotMetCount += 1;
+
+        const sellerNotification = await createItemNotSoldNotification(tx, {
+          userId: listingToClose.sellerId,
+          listingId: listingToClose.id,
+          listingTitle: listingToClose.title,
+          outcome: "reserve_not_met",
+          createdAt: now,
+        });
+
+        if (sellerNotification) {
+          notificationEvents.push({
+            userId: listingToClose.sellerId,
+            event: sellerNotification,
+          });
+        }
       }
 
-      events.push(toLifecycleEvent(closedListing));
+      listingEvents.push(toLifecycleEvent(closedListing));
     }
 
-    return events;
+    return {
+      listingEvents,
+      notificationEvents,
+    };
   });
 
   await Promise.all(
-    changedEvents.map(async (event) => {
+    transactionResult.listingEvents.map(async (event) => {
       try {
         await publishListingLifecycleChanged(event);
       } catch (error) {
         console.error("Failed to publish listing lifecycle update.", error);
+      }
+    }),
+  );
+
+  await Promise.all(
+    transactionResult.notificationEvents.map(async ({ userId, event }) => {
+      try {
+        await publishNotificationCreated(userId, event);
+      } catch (error) {
+        console.error("Failed to publish notification update.", error);
       }
     }),
   );

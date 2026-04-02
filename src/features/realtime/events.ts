@@ -1,8 +1,12 @@
 import type { ListingOutcome, ListingStatus } from "@/features/listings/domain";
+import type {
+  NotificationIcon,
+  NotificationType,
+} from "@/features/notifications/domain";
 
 export const ABLY_LISTING_EVENT_NAME = "bid.placed";
-export const ABLY_OUTBID_EVENT_NAME = "auction.outbid";
 export const ABLY_LISTING_LIFECYCLE_EVENT_NAME = "listing.lifecycle.changed";
+export const ABLY_NOTIFICATION_CREATED_EVENT_NAME = "notification.created";
 
 export function getListingChannelName(listingId: string) {
   return `listing:${listingId}`;
@@ -27,14 +31,17 @@ export type ListingBidPlacedEvent = {
   };
 };
 
-export type AuctionOutbidEvent = {
-  acceptedBidId: string;
+export type NotificationCreatedEvent = {
+  notificationId: string;
+  type: NotificationType;
   listingId: string;
-  listingTitle: string;
-  currentBidCents: number;
-  minimumNextBidCents: number;
-  bidCount: number;
   listingUrl: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  readAt: string | null;
+  icon: NotificationIcon;
+  outcome: ListingOutcome | null;
 };
 
 export type ListingLifecycleChangedEvent = {

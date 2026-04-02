@@ -15,6 +15,8 @@ import type {
   PlaceBidInput,
   SaveDraftListingInput,
 } from "@/features/listings/schema";
+import { createOutbidNotification } from "@/features/notifications/mutations";
+import type { NotificationCreatedEvent } from "@/features/realtime/events";
 
 type Database = LibSQLDatabase<typeof schema>;
 type BidStateDatabase = Pick<Database, "select">;
@@ -431,6 +433,7 @@ export async function placeBidForListing(
 
   try {
     return await resolvedDatabase.transaction(async (tx) => {
+      const notificationEvents: NotificationCreatedEvent[] = [];
       const updatedListings = await tx
         .update(listing)
         .set({
@@ -475,6 +478,26 @@ export async function placeBidForListing(
         .innerJoin(user, eq(bid.bidderId, user.id))
         .where(eq(bid.id, bidId));
 
+      if (highestBid?.bidderId && highestBid.bidderId !== input.bidderId) {
+        const outbidNotification = await createOutbidNotification(tx, {
+          userId: highestBid.bidderId,
+          listingId: input.listingId,
+          listingTitle: listingRecord.title,
+          acceptedBidId: bidId,
+          currentBidCents: input.amountCents,
+          minimumNextBidCents: getMinimumNextBidCents(
+            listingRecord.startingBidCents,
+            input.amountCents,
+          ),
+          bidCount: listingRecord.bidCount + 1,
+          createdAt: now,
+        });
+
+        if (outbidNotification) {
+          notificationEvents.push(outbidNotification);
+        }
+      }
+
       return {
         listingId: input.listingId,
         listingTitle: listingRecord.title,
@@ -486,6 +509,7 @@ export async function placeBidForListing(
         ),
         highestBidderId: input.bidderId,
         previousHighestBidderId: highestBid?.bidderId ?? null,
+        notificationEvents,
         bid: placedBid,
       };
     });

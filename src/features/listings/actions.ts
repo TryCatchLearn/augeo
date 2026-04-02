@@ -42,11 +42,11 @@ import {
   saveDraftListingSchema,
   validateEnhancedDescription,
 } from "@/features/listings/schema";
-import type {
-  AuctionOutbidEvent,
-  ListingBidPlacedEvent,
-} from "@/features/realtime/events";
-import { publishAuctionOutbid, publishListingBidPlaced } from "@/server/ably";
+import type { ListingBidPlacedEvent } from "@/features/realtime/events";
+import {
+  publishListingBidPlaced,
+  publishNotificationCreated,
+} from "@/server/ably";
 import {
   AiGenerationError,
   generateSmartListingFromImage,
@@ -249,21 +249,17 @@ export async function placeBidAction(input: unknown) {
       result.previousHighestBidderId &&
       result.previousHighestBidderId !== result.highestBidderId
     ) {
-      try {
-        const outbidEvent: AuctionOutbidEvent = {
-          acceptedBidId: result.bid.id,
-          listingId: result.listingId,
-          listingTitle: result.listingTitle,
-          currentBidCents: result.currentBidCents,
-          minimumNextBidCents: result.minimumNextBidCents,
-          bidCount: result.bidCount,
-          listingUrl: `/listings/${result.listingId}`,
-        };
+      const previousHighestBidderId = result.previousHighestBidderId;
 
-        await publishAuctionOutbid(result.previousHighestBidderId, outbidEvent);
-      } catch (error) {
-        console.error("Failed to publish outbid update.", error);
-      }
+      await Promise.all(
+        result.notificationEvents.map(async (event) => {
+          try {
+            await publishNotificationCreated(previousHighestBidderId, event);
+          } catch (error) {
+            console.error("Failed to publish notification update.", error);
+          }
+        }),
+      );
     }
 
     revalidateListingPaths(result.listingId);

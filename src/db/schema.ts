@@ -12,6 +12,7 @@ import {
   listingOutcomes,
   listingStatuses,
 } from "@/features/listings/domain";
+import { notificationTypes } from "@/features/notifications/domain";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -188,11 +189,37 @@ export const bid = sqliteTable(
   ],
 );
 
+export const notification = sqliteTable(
+  "notification",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    type: text("type", { enum: notificationTypes }).notNull(),
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    payload: text("payload").notNull(),
+    readAt: integer("read_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+  },
+  (table) => [
+    index("notification_user_recent_idx").on(table.userId, table.createdAt),
+    index("notification_user_unread_idx").on(
+      table.userId,
+      table.readAt,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   listings: many(listing),
   bids: many(bid),
+  notifications: many(notification),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -240,6 +267,13 @@ export const bidRelations = relations(bid, ({ one }) => ({
   }),
   bidder: one(user, {
     fields: [bid.bidderId],
+    references: [user.id],
+  }),
+}));
+
+export const notificationRelations = relations(notification, ({ one }) => ({
+  user: one(user, {
+    fields: [notification.userId],
     references: [user.id],
   }),
 }));

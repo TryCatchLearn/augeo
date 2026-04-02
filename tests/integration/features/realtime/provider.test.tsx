@@ -172,7 +172,7 @@ describe("RealtimeProvider", () => {
     await waitFor(() => {
       expect(
         hoisted.channels.get("user:user-1")?.subscribe,
-      ).toHaveBeenCalledWith("auction.outbid", expect.any(Function));
+      ).toHaveBeenCalledWith("notification.created", expect.any(Function));
     });
   });
 
@@ -194,7 +194,7 @@ describe("RealtimeProvider", () => {
     expect(hoisted.channels.has("user:user-1")).toBe(false);
   });
 
-  it("shows a deduped outbid toast with a listing CTA", async () => {
+  it("shows a deduped notification toast with a listing CTA", async () => {
     hoisted.pathname = "/dashboard";
     hoisted.channels.clear();
     hoisted.realtimeConstructor.mockClear();
@@ -208,32 +208,41 @@ describe("RealtimeProvider", () => {
 
     await waitFor(() => {
       expect(
-        hoisted.channels.get("user:user-1")?.listeners.get("auction.outbid"),
+        hoisted.channels
+          .get("user:user-1")
+          ?.listeners.get("notification.created"),
       ).toBeDefined();
     });
 
-    const outbidEvent = {
-      acceptedBidId: "bid-2",
+    const notificationEvent = {
+      notificationId: "notification-1",
+      type: "outbid",
       listingId: "listing-1",
-      listingTitle: "Collector Camera",
-      currentBidCents: 50_000,
-      minimumNextBidCents: 51_000,
-      bidCount: 2,
+      title: "You've been outbid",
+      message: "New current bid $500.00 across 2 bids. Next bid $510.00.",
       listingUrl: "/listings/listing-1",
+      createdAt: "2026-04-02T12:00:00.000Z",
+      readAt: null,
+      icon: "gavel",
+      outcome: null,
     };
 
     await act(async () => {
-      hoisted.channels.get("user:user-1")?.listeners.get("auction.outbid")?.({
-        data: outbidEvent,
+      hoisted.channels
+        .get("user:user-1")
+        ?.listeners.get("notification.created")?.({
+        data: notificationEvent,
       });
-      hoisted.channels.get("user:user-1")?.listeners.get("auction.outbid")?.({
-        data: outbidEvent,
+      hoisted.channels
+        .get("user:user-1")
+        ?.listeners.get("notification.created")?.({
+        data: notificationEvent,
       });
     });
 
     expect(hoisted.toastCustom).toHaveBeenCalledTimes(1);
     expect(hoisted.toastCustom).toHaveBeenCalledWith(expect.any(Function), {
-      id: "listing-1:bid-2",
+      id: "notification-1",
     });
 
     const renderToast = hoisted.toastCustom.mock
@@ -242,7 +251,11 @@ describe("RealtimeProvider", () => {
     render(renderToast());
 
     expect(screen.getByText("You've been outbid")).toBeInTheDocument();
-    expect(screen.getByText("Collector Camera")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "New current bid $500.00 across 2 bids. Next bid $510.00.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View listing" })).toHaveAttribute(
       "href",
       "/listings/listing-1",

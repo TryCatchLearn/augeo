@@ -6,6 +6,7 @@ import {
   type RealtimeChannel,
   type RealtimeClient,
 } from "ably";
+import { BadgeDollarSign, CircleAlert, Gavel, Trophy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -18,16 +19,15 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { formatListingPrice } from "@/features/listings/utils";
 import {
   ABLY_LISTING_EVENT_NAME,
   ABLY_LISTING_LIFECYCLE_EVENT_NAME,
-  ABLY_OUTBID_EVENT_NAME,
-  type AuctionOutbidEvent,
+  ABLY_NOTIFICATION_CREATED_EVENT_NAME,
   getListingChannelName,
   getUserChannelName,
   type ListingBidPlacedEvent,
   type ListingLifecycleChangedEvent,
+  type NotificationCreatedEvent,
 } from "@/features/realtime/events";
 import { getRealtimeConnectionMode } from "@/features/realtime/policy";
 
@@ -63,7 +63,7 @@ export function RealtimeProvider({
   const [client, setClient] = useState<RealtimeClient | null>(null);
   const clientRef = useRef<RealtimeClient | null>(null);
   const modeRef = useRef<ReturnType<typeof getRealtimeConnectionMode>>("none");
-  const seenOutbidEventsRef = useRef(new Set<string>());
+  const seenNotificationEventsRef = useRef(new Set<string>());
 
   useEffect(() => {
     const nextMode = getRealtimeConnectionMode({
@@ -108,46 +108,48 @@ export function RealtimeProvider({
     };
   }, []);
 
-  const showOutbidToast = useEffectEvent((event: AuctionOutbidEvent) => {
-    const dedupeKey = `${event.listingId}:${event.acceptedBidId}`;
+  const showNotificationToast = useEffectEvent(
+    (event: NotificationCreatedEvent) => {
+      if (seenNotificationEventsRef.current.has(event.notificationId)) {
+        return;
+      }
 
-    if (seenOutbidEventsRef.current.has(dedupeKey)) {
-      return;
-    }
+      seenNotificationEventsRef.current.add(event.notificationId);
 
-    seenOutbidEventsRef.current.add(dedupeKey);
+      const Icon = getNotificationIcon(event.icon);
 
-    toast.custom(
-      () => (
-        <div className="w-full max-w-sm rounded-3xl border border-border/70 bg-background/95 p-4 shadow-xl backdrop-blur">
-          <p className="text-sm font-medium tracking-[0.18em] uppercase text-primary">
-            You&apos;ve been outbid
-          </p>
-          <p className="mt-2 text-base font-semibold text-foreground">
-            {event.listingTitle}
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            New current bid {formatListingPrice(event.currentBidCents)} across{" "}
-            {event.bidCount} bid{event.bidCount === 1 ? "" : "s"}.
-          </p>
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">
-              Next bid {formatListingPrice(event.minimumNextBidCents)}
-            </span>
-            <Link
-              href={event.listingUrl}
-              className="rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
-            >
-              View listing
-            </Link>
+      toast.custom(
+        () => (
+          <div className="w-full max-w-sm rounded-3xl border border-border/70 bg-background/95 p-4 shadow-xl backdrop-blur">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+                <Icon aria-hidden="true" className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium tracking-[0.18em] uppercase text-primary">
+                  {event.title}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {event.message}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <Link
+                href={event.listingUrl}
+                className="rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
+              >
+                View listing
+              </Link>
+            </div>
           </div>
-        </div>
-      ),
-      {
-        id: dedupeKey,
-      },
-    );
-  });
+        ),
+        {
+          id: event.notificationId,
+        },
+      );
+    },
+  );
 
   useEffect(() => {
     if (!client || !viewerId) {
@@ -158,15 +160,15 @@ export function RealtimeProvider({
       getUserChannelName(viewerId),
     );
     const listener = (message: InboundMessage) => {
-      showOutbidToast(message.data as AuctionOutbidEvent);
+      showNotificationToast(message.data as NotificationCreatedEvent);
     };
 
-    void channel.subscribe(ABLY_OUTBID_EVENT_NAME, listener);
+    void channel.subscribe(ABLY_NOTIFICATION_CREATED_EVENT_NAME, listener);
 
     return () => {
-      channel.unsubscribe(ABLY_OUTBID_EVENT_NAME, listener);
+      channel.unsubscribe(ABLY_NOTIFICATION_CREATED_EVENT_NAME, listener);
     };
-  }, [client, showOutbidToast, viewerId]);
+  }, [client, showNotificationToast, viewerId]);
 
   const value = useMemo(
     () => ({
@@ -180,6 +182,19 @@ export function RealtimeProvider({
       {children}
     </RealtimeContext.Provider>
   );
+}
+
+function getNotificationIcon(icon: NotificationCreatedEvent["icon"]) {
+  switch (icon) {
+    case "gavel":
+      return Gavel;
+    case "trophy":
+      return Trophy;
+    case "badge-dollar-sign":
+      return BadgeDollarSign;
+    case "circle-alert":
+      return CircleAlert;
+  }
 }
 
 export function useRealtime() {

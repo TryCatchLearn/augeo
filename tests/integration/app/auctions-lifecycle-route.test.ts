@@ -3,13 +3,14 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bid, listing } from "@/db/schema";
+import { bid, listing, notification } from "@/db/schema";
 import { insertUser } from "../../factories/user";
 import { createTestDatabase, type TestDatabase } from "../../helpers/database";
 
 const hoisted = vi.hoisted(() => ({
   db: null as TestDatabase["db"] | null,
   publishListingLifecycleChanged: vi.fn(),
+  publishNotificationCreated: vi.fn(),
 }));
 
 vi.mock("@/db/client", () => ({
@@ -20,6 +21,7 @@ vi.mock("@/db/client", () => ({
 
 vi.mock("@/server/ably", () => ({
   publishListingLifecycleChanged: hoisted.publishListingLifecycleChanged,
+  publishNotificationCreated: hoisted.publishNotificationCreated,
 }));
 
 describe("auctions lifecycle route", () => {
@@ -31,6 +33,7 @@ describe("auctions lifecycle route", () => {
     testDatabase = await createTestDatabase();
     hoisted.db = testDatabase.db;
     hoisted.publishListingLifecycleChanged.mockReset();
+    hoisted.publishNotificationCreated.mockReset();
     vi.stubEnv("AUCTION_LIFECYCLE_CRON_SECRET", "phase-5-secret");
   });
 
@@ -167,7 +170,7 @@ describe("auctions lifecycle route", () => {
   });
 
   it("closes an active listing as sold when the reserve is met", async () => {
-    const { listingId } = await seedListing({
+    const { listingId, seller } = await seedListing({
       currentBidCents: 12_500,
       bidCount: 1,
       endsAt: new Date("2026-04-02T11:59:00.000Z"),
@@ -202,6 +205,25 @@ describe("auctions lifecycle route", () => {
       winnerUserId: bidder.id,
       winningBidId: bidId,
     });
+    const createdNotifications = await testDatabase.db
+      .select({
+        userId: notification.userId,
+        type: notification.type,
+      })
+      .from(notification);
+
+    expect(createdNotifications).toEqual(
+      expect.arrayContaining([
+        {
+          userId: bidder.id,
+          type: "auction_won",
+        },
+        {
+          userId: seller.id,
+          type: "item_sold",
+        },
+      ]),
+    );
     expect(hoisted.publishListingLifecycleChanged).toHaveBeenCalledWith({
       listingId,
       status: "ended",
@@ -212,10 +234,11 @@ describe("auctions lifecycle route", () => {
       currentBidCents: 12_500,
       bidCount: 1,
     });
+    expect(hoisted.publishNotificationCreated).toHaveBeenCalledTimes(2);
   });
 
   it("closes an active listing as unsold when it has no bids", async () => {
-    const { listingId } = await seedListing({
+    const { listingId, seller } = await seedListing({
       endsAt: new Date("2026-04-02T11:59:00.000Z"),
     });
 
@@ -246,10 +269,23 @@ describe("auctions lifecycle route", () => {
       winnerUserId: null,
       winningBidId: null,
     });
+    await expect(
+      testDatabase.db
+        .select({
+          type: notification.type,
+          userId: notification.userId,
+        })
+        .from(notification),
+    ).resolves.toEqual([
+      {
+        type: "item_not_sold",
+        userId: seller.id,
+      },
+    ]);
   });
 
   it("closes an active listing as reserve_not_met when the top bid is too low", async () => {
-    const { listingId } = await seedListing({
+    const { listingId, seller } = await seedListing({
       currentBidCents: 19_000,
       bidCount: 1,
       endsAt: new Date("2026-04-02T11:59:00.000Z"),
@@ -285,6 +321,19 @@ describe("auctions lifecycle route", () => {
       winnerUserId: null,
       winningBidId: null,
     });
+    await expect(
+      testDatabase.db
+        .select({
+          type: notification.type,
+          userId: notification.userId,
+        })
+        .from(notification),
+    ).resolves.toEqual([
+      {
+        type: "item_not_sold",
+        userId: seller.id,
+      },
+    ]);
   });
 
   it("is safe to rerun without duplicating state changes or publish events", async () => {
@@ -330,5 +379,9 @@ describe("auctions lifecycle route", () => {
       winningBidId: bidId,
     });
     expect(hoisted.publishListingLifecycleChanged).toHaveBeenCalledTimes(1);
+    expect(hoisted.publishNotificationCreated).toHaveBeenCalledTimes(2);
+    await expect(
+      testDatabase.db.select({ id: notification.id }).from(notification),
+    ).resolves.toHaveLength(2);
   });
 });

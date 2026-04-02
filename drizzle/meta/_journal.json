@@ -43,6 +43,13 @@
       "when": 1775100467226,
       "tag": "0005_hot_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1775106424302,
+      "tag": "0006_wandering_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

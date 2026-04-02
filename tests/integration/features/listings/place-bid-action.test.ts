@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bid, listing } from "@/db/schema";
+import { bid, listing, notification } from "@/db/schema";
 import { insertUser } from "../../../factories/user";
 import {
   createTestDatabase,
@@ -13,8 +13,8 @@ import {
 const hoisted = vi.hoisted(() => ({
   requireAuthenticatedSession: vi.fn(),
   revalidatePath: vi.fn(),
-  publishAuctionOutbid: vi.fn(),
   publishListingBidPlaced: vi.fn(),
+  publishNotificationCreated: vi.fn(),
   db: null as TestDatabase["db"] | null,
 }));
 
@@ -27,8 +27,8 @@ vi.mock("@/features/auth/session", () => ({
 }));
 
 vi.mock("@/server/ably", () => ({
-  publishAuctionOutbid: hoisted.publishAuctionOutbid,
   publishListingBidPlaced: hoisted.publishListingBidPlaced,
+  publishNotificationCreated: hoisted.publishNotificationCreated,
 }));
 
 vi.mock("@/db/client", () => ({
@@ -45,8 +45,8 @@ describe("placeBidAction", () => {
     hoisted.db = testDatabase.db;
     hoisted.revalidatePath.mockReset();
     hoisted.requireAuthenticatedSession.mockReset();
-    hoisted.publishAuctionOutbid.mockReset();
     hoisted.publishListingBidPlaced.mockReset();
+    hoisted.publishNotificationCreated.mockReset();
   });
 
   afterEach(async () => {
@@ -151,15 +151,22 @@ describe("placeBidAction", () => {
     expect(updatedListing?.currentBidCents).toBe(10_500);
     expect(updatedListing?.bidCount).toBe(2);
     expect(updatedListing?.version).toBe(2);
-    expect(hoisted.publishAuctionOutbid).toHaveBeenCalledWith(buyerOne.id, {
-      acceptedBidId: expect.any(String),
-      listingId,
-      listingTitle: "Auction Camera",
-      currentBidCents: 10_500,
-      minimumNextBidCents: 11_000,
-      bidCount: 2,
-      listingUrl: `/listings/${listingId}`,
-    });
+    const notifications = await testDatabase.db
+      .select()
+      .from(notification)
+      .where(eq(notification.userId, buyerOne.id));
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.type).toBe("outbid");
+    expect(hoisted.publishNotificationCreated).toHaveBeenCalledWith(
+      buyerOne.id,
+      expect.objectContaining({
+        type: "outbid",
+        listingId,
+        listingUrl: `/listings/${listingId}`,
+        title: "You've been outbid",
+      }),
+    );
   });
 
   it("allows the highest bidder to raise their own bid", async () => {
@@ -175,7 +182,7 @@ describe("placeBidAction", () => {
       status: "success",
       listingId,
     });
-    expect(hoisted.publishAuctionOutbid).not.toHaveBeenCalled();
+    expect(hoisted.publishNotificationCreated).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated bids", async () => {
@@ -259,6 +266,6 @@ describe("placeBidAction", () => {
 
     await placeBidAs(buyer.id, 10_000, listingId);
 
-    expect(hoisted.publishAuctionOutbid).not.toHaveBeenCalled();
+    expect(hoisted.publishNotificationCreated).not.toHaveBeenCalled();
   });
 });
