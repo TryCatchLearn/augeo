@@ -23,8 +23,10 @@ import type { PaginatedResult } from "@/features/listings/helpers/pagination";
 
 export type ListingCardData = {
   id: string;
+  sellerId: string;
   title: string;
   status: ListingStatus;
+  outcome: "sold" | "unsold" | "reserve_not_met" | null;
   startingBidCents: number;
   currentPriceCents: number;
   bidCount: number;
@@ -60,6 +62,9 @@ export type ListingDetailData = {
   viewerBidStatus: ViewerBidStatus;
   canPlaceBid: boolean;
   reservePriceCents: number | null;
+  outcome: "sold" | "unsold" | "reserve_not_met" | null;
+  winnerUserId: string | null;
+  winningBidId: string | null;
   aiDescriptionGenerationCount: number;
   startsAt: Date | null;
   endsAt: Date;
@@ -101,8 +106,10 @@ async function resolveDatabase(database?: Database) {
 
 const listingCardSelection = {
   id: listing.id,
+  sellerId: listing.sellerId,
   title: listing.title,
   status: listing.status,
+  outcome: listing.outcome,
   startingBidCents: listing.startingBidCents,
   currentPriceCents: sql<number>`coalesce(${listing.currentBidCents}, ${listing.startingBidCents})`,
   bidCount: listing.bidCount,
@@ -258,6 +265,9 @@ async function getListingDetail(
       currentBidCents: listing.currentBidCents,
       bidCount: listing.bidCount,
       reservePriceCents: listing.reservePriceCents,
+      outcome: listing.outcome,
+      winnerUserId: listing.winnerUserId,
+      winningBidId: listing.winningBidId,
       aiDescriptionGenerationCount: listing.aiDescriptionGenerationCount,
       startsAt: listing.startsAt,
       endsAt: listing.endsAt,

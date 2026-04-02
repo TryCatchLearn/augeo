@@ -26,6 +26,18 @@ vi.mock("@/features/listings/queries", () => ({
   listSellerListingCards: mockListSellerListingCards,
 }));
 
+vi.mock("next/navigation", async () => {
+  const actual =
+    await vi.importActual<typeof import("next/navigation")>("next/navigation");
+
+  return {
+    ...actual,
+    useRouter: () => ({
+      refresh: vi.fn(),
+    }),
+  };
+});
+
 vi.mock("@/features/listings/components/listings-pagination", () => ({
   ListingsPagination: (props: unknown) => {
     mockListingsPagination(props);

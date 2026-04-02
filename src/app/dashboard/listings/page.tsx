@@ -87,7 +87,7 @@ export default async function DashboardListingsPage({
       </nav>
 
       <div className="mt-8">
-        <ListingCardGrid listings={listings.items} />
+        <ListingCardGrid listings={listings.items} viewerId={session.user.id} />
       </div>
 
       <ListingsPagination

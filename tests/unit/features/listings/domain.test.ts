@@ -29,6 +29,7 @@ import {
 } from "@/features/listings/domain";
 import {
   formatTimeRemaining,
+  getCountdownUrgencyTier,
   getListingTimeMeta,
 } from "@/features/listings/utils";
 
@@ -262,17 +263,40 @@ describe("listing status rules", () => {
     const now = new Date("2026-03-21T12:00:00.000Z");
 
     expect(formatTimeRemaining(new Date("2026-03-24T15:30:00.000Z"), now)).toBe(
-      "3d 3h left",
+      "3d 3h 30m 0s left",
     );
     expect(formatTimeRemaining(new Date("2026-03-21T17:45:00.000Z"), now)).toBe(
-      "5h 45m left",
+      "5h 45m 0s left",
     );
     expect(formatTimeRemaining(new Date("2026-03-21T12:10:00.000Z"), now)).toBe(
-      "10m left",
+      "10m 0s left",
+    );
+    expect(formatTimeRemaining(new Date("2026-03-21T12:00:09.000Z"), now)).toBe(
+      "9s left",
     );
     expect(formatTimeRemaining(new Date("2026-03-21T11:59:00.000Z"), now)).toBe(
       "Ended",
     );
+  });
+
+  it("maps countdown urgency thresholds from neutral through ended", () => {
+    const now = new Date("2026-03-21T12:00:00.000Z");
+
+    expect(
+      getCountdownUrgencyTier(new Date("2026-03-23T12:00:01.000Z"), now),
+    ).toBe("neutral");
+    expect(
+      getCountdownUrgencyTier(new Date("2026-03-22T12:00:00.000Z"), now),
+    ).toBe("warning");
+    expect(
+      getCountdownUrgencyTier(new Date("2026-03-21T12:59:59.000Z"), now),
+    ).toBe("urgent");
+    expect(
+      getCountdownUrgencyTier(new Date("2026-03-21T12:05:00.000Z"), now),
+    ).toBe("critical");
+    expect(
+      getCountdownUrgencyTier(new Date("2026-03-21T12:00:00.000Z"), now),
+    ).toBe("ended");
   });
 
   it("maps the locked bid increment ladder", () => {
@@ -376,7 +400,7 @@ describe("listing status rules", () => {
       ),
     ).toEqual({
       label: "Starts In",
-      value: "2h 30m left",
+      value: "2h 30m 0s left",
     });
 
     expect(

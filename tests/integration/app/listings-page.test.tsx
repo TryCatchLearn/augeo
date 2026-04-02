@@ -16,6 +16,18 @@ vi.mock("@/features/listings/queries", () => ({
   listPublicListingCards: mockListPublicListingCards,
 }));
 
+vi.mock("next/navigation", async () => {
+  const actual =
+    await vi.importActual<typeof import("next/navigation")>("next/navigation");
+
+  return {
+    ...actual,
+    useRouter: () => ({
+      refresh: vi.fn(),
+    }),
+  };
+});
+
 vi.mock("@/features/listings/components/public-listings-controls", () => ({
   PublicListingsControls: (props: unknown) => {
     mockPublicListingsControls(props);

@@ -1,15 +1,19 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListingAuctionActivityPanel } from "@/features/listings/components/listing-auction-activity-panel";
 import { ListingBidForm } from "@/features/listings/components/listing-bid-form";
 import { ListingBidHistory } from "@/features/listings/components/listing-bid-history";
+import { ListingCountdown } from "@/features/listings/components/listing-countdown";
 import { ListingImageGallery } from "@/features/listings/components/listing-image-gallery";
 import { ListingImageUploadPanel } from "@/features/listings/components/listing-image-upload-panel";
 import { ListingSellerControls } from "@/features/listings/components/listing-seller-controls";
 import {
+  canPlaceBid,
+  getMinimumNextBidCents,
   getViewerBidStatus,
   type ViewerBidStatus,
 } from "@/features/listings/domain";
@@ -18,10 +22,15 @@ import type {
   ListingDetailData,
 } from "@/features/listings/queries";
 import {
+  type CountdownUrgencyTier,
   formatListingPrice,
-  getListingTimeMeta,
+  getListingEndStateCopy,
 } from "@/features/listings/utils";
-import { useListingBidPlacedSubscription } from "@/features/realtime/provider";
+import {
+  useListingBidPlacedSubscription,
+  useListingLifecycleChangedSubscription,
+} from "@/features/realtime/provider";
+import { cn } from "@/lib/utils";
 
 type ListingDetailLiveViewProps = {
   initialListing: ListingDetailData;
@@ -48,10 +57,21 @@ export function ListingDetailLiveView({
   initialListing,
   viewerId,
 }: ListingDetailLiveViewProps) {
+  const router = useRouter();
   const [listing, setListing] = useState(initialListing);
+  const [isLocallyFinalizing, setIsLocallyFinalizing] = useState(false);
+  const [hasAttemptedRefresh, setHasAttemptedRefresh] = useState(false);
 
   useEffect(() => {
     setListing(initialListing);
+
+    if (initialListing.status !== "active") {
+      setIsLocallyFinalizing(false);
+    }
+
+    if (initialListing.status === "ended") {
+      setHasAttemptedRefresh(false);
+    }
   }, [initialListing]);
 
   useListingBidPlacedSubscription(initialListing.id, (event) => {
@@ -89,21 +109,69 @@ export function ListingDetailLiveView({
     });
   });
 
+  useListingLifecycleChangedSubscription(initialListing.id, (event) => {
+    setListing((currentListing) => {
+      const currentBidCents =
+        event.currentBidCents ?? currentListing.currentBidCents;
+
+      return {
+        ...currentListing,
+        status: event.status,
+        outcome: event.outcome,
+        winnerUserId: event.winnerUserId,
+        winningBidId: event.winningBidId,
+        currentBidCents,
+        currentPriceCents:
+          event.currentBidCents ?? currentListing.currentPriceCents,
+        minimumNextBidCents:
+          event.currentBidCents === null
+            ? currentListing.minimumNextBidCents
+            : getMinimumNextBidCents(
+                currentListing.startingBidCents,
+                event.currentBidCents,
+              ),
+        bidCount: event.bidCount,
+        highestBidderId: event.winnerUserId,
+        canPlaceBid: canPlaceBid({
+          sellerId: currentListing.sellerId,
+          viewerId,
+          status: event.status,
+          endsAt: currentListing.endsAt,
+        }),
+      };
+    });
+
+    if (event.status === "ended") {
+      setIsLocallyFinalizing(false);
+      setHasAttemptedRefresh(false);
+    }
+  });
+
   const isOwner = viewerId === listing.sellerId;
   const canManageImages = isOwner && listing.status === "draft";
-  const timeMeta = getListingTimeMeta(
-    listing.status,
-    listing.endsAt,
-    listing.startsAt,
-  );
   const showSellerControls = isOwner && listing.bidCount === 0;
-  const topCardTitle = isOwner
-    ? showSellerControls
-      ? "Seller Controls"
-      : "Auction Activity"
-    : listing.canPlaceBid
-      ? "Place A Bid"
-      : "Auction Activity";
+  const showEndedState = listing.status === "ended" || isLocallyFinalizing;
+  const endedCopy = getListingEndStateCopy({
+    outcome: listing.outcome,
+    bidCount: listing.bidCount,
+    isSeller: isOwner,
+    isWinner:
+      viewerId !== null && viewerId !== undefined
+        ? viewerId === listing.winnerUserId
+        : false,
+    isFinalizing: isLocallyFinalizing,
+  });
+  const topCardTitle = showEndedState
+    ? isLocallyFinalizing
+      ? "Auction Finalizing"
+      : "Auction Result"
+    : isOwner
+      ? showSellerControls
+        ? "Seller Controls"
+        : "Auction Activity"
+      : listing.canPlaceBid
+        ? "Place A Bid"
+        : "Auction Activity";
   const highestBidderLabel = listing.highestBidderId
     ? listing.viewerBidStatus === "highest"
       ? "You"
@@ -114,6 +182,33 @@ export function ListingDetailLiveView({
       ? "Bidding is unavailable because this listing is not currently active."
       : "You can watch the live auction activity here, but bidding is unavailable for your account on this listing."
     : "Sign in to place a bid. You can still watch the current auction activity below.";
+  const countdownToneClasses: Record<CountdownUrgencyTier, string> = {
+    neutral:
+      "border-border/70 bg-background/55 text-foreground shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-border)_50%,transparent)]",
+    warning:
+      "border-accent/30 bg-accent/12 text-accent shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_26%,transparent)]",
+    urgent:
+      "border-primary/30 bg-primary/12 text-primary shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-primary)_24%,transparent)]",
+    critical:
+      "border-destructive/28 bg-destructive/10 text-destructive shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-destructive)_24%,transparent)]",
+    ended:
+      "border-border/70 bg-muted/50 text-muted-foreground shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-border)_50%,transparent)]",
+  };
+
+  const handleCountdownEnd = () => {
+    if (listing.status !== "active") {
+      return;
+    }
+
+    setIsLocallyFinalizing(true);
+
+    if (hasAttemptedRefresh) {
+      return;
+    }
+
+    setHasAttemptedRefresh(true);
+    router.refresh();
+  };
 
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
@@ -125,10 +220,19 @@ export function ListingDetailLiveView({
           <h1 className="text-4xl font-semibold tracking-tight">
             {listing.title}
           </h1>
-          <StatusBadge
-            status={listing.status}
-            className="shrink-0 rounded-full border border-white/12 px-6 py-3 text-base font-semibold tracking-[0.22em] uppercase shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_16%,transparent),0_20px_44px_rgba(0,0,0,0.34)] sm:px-7 sm:py-3.5 sm:text-lg"
-          />
+          {isLocallyFinalizing ? (
+            <StatusBadge
+              tone="ended"
+              className="shrink-0 rounded-full border border-white/12 px-6 py-3 text-base font-semibold tracking-[0.22em] uppercase shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_16%,transparent),0_20px_44px_rgba(0,0,0,0.34)] sm:px-7 sm:py-3.5 sm:text-lg"
+            >
+              Finalizing
+            </StatusBadge>
+          ) : (
+            <StatusBadge
+              status={listing.status}
+              className="shrink-0 rounded-full border border-white/12 px-6 py-3 text-base font-semibold tracking-[0.22em] uppercase shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-primary)_16%,transparent),0_20px_44px_rgba(0,0,0,0.34)] sm:px-7 sm:py-3.5 sm:text-lg"
+            />
+          )}
         </div>
       </div>
 
@@ -150,10 +254,60 @@ export function ListingDetailLiveView({
           </dd>
         </div>
         <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-4">
-          <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
-            {timeMeta.label}
-          </dt>
-          <dd className="mt-2 text-xl font-semibold">{timeMeta.value}</dd>
+          {listing.status === "scheduled" && listing.startsAt ? (
+            <ListingCountdown
+              key={listing.startsAt.toISOString()}
+              targetAt={listing.startsAt}
+            >
+              {({ formatted, urgency }) => (
+                <>
+                  <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                    Starts In
+                  </dt>
+                  <dd
+                    className={cn(
+                      "mt-2 inline-flex rounded-full border px-3 py-1.5 text-xl font-semibold",
+                      countdownToneClasses[urgency],
+                    )}
+                  >
+                    {formatted}
+                  </dd>
+                </>
+              )}
+            </ListingCountdown>
+          ) : showEndedState ? (
+            <>
+              <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                {endedCopy.eyebrow}
+              </dt>
+              <dd className="mt-2 text-xl font-semibold">{endedCopy.title}</dd>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {endedCopy.description}
+              </p>
+            </>
+          ) : (
+            <ListingCountdown
+              key={listing.endsAt.toISOString()}
+              targetAt={listing.endsAt}
+              onEnd={handleCountdownEnd}
+            >
+              {({ formatted, urgency }) => (
+                <>
+                  <dt className="text-xs tracking-[0.18em] uppercase text-muted-foreground">
+                    Time Remaining
+                  </dt>
+                  <dd
+                    className={cn(
+                      "mt-2 inline-flex rounded-full border px-3 py-1.5 text-xl font-semibold",
+                      countdownToneClasses[urgency],
+                    )}
+                  >
+                    {formatted}
+                  </dd>
+                </>
+              )}
+            </ListingCountdown>
+          )}
         </div>
       </dl>
 
@@ -219,7 +373,19 @@ export function ListingDetailLiveView({
               <CardTitle className="text-xl">{topCardTitle}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 px-6 pb-6">
-              {showSellerControls ? (
+              {showEndedState ? (
+                <div className="rounded-[1.75rem] border border-border/70 bg-background/55 p-5">
+                  <p className="text-xs font-semibold tracking-[0.18em] uppercase text-primary/85">
+                    {endedCopy.eyebrow}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                    {endedCopy.title}
+                  </h2>
+                  <p className="mt-3 leading-7 text-muted-foreground">
+                    {endedCopy.description}
+                  </p>
+                </div>
+              ) : showSellerControls ? (
                 <ListingSellerControls listing={listing} />
               ) : isOwner ? (
                 <ListingAuctionActivityPanel

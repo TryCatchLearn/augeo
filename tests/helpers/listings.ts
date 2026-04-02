@@ -19,8 +19,10 @@ export function createListingCardData(
 ): ListingCardData {
   return {
     id: "listing-1",
+    sellerId: "seller-1",
     title: "Public Camera",
     status: "active",
+    outcome: null,
     startingBidCents: 25_000,
     currentPriceCents: 25_000,
     bidCount: 0,

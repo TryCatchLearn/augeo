@@ -1,17 +1,38 @@
 import { act, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ListingDetailLiveView } from "@/features/listings/components/listing-detail-live-view";
 import type { ListingDetailData } from "@/features/listings/queries";
 
 const hoisted = vi.hoisted(() => ({
+  refresh: vi.fn(),
   subscribe: vi.fn(),
   emitBidPlaced: null as null | ((event: Record<string, unknown>) => void),
+  emitLifecycleChanged: null as
+    | null
+    | ((event: Record<string, unknown>) => void),
 }));
+
+vi.mock("next/navigation", async () => {
+  const actual =
+    await vi.importActual<typeof import("next/navigation")>("next/navigation");
+
+  return {
+    ...actual,
+    useRouter: () => ({
+      refresh: hoisted.refresh,
+    }),
+  };
+});
 
 vi.mock("@/features/realtime/provider", () => ({
   useListingBidPlacedSubscription: vi.fn(
     (_listingId: string, onEvent: (event: Record<string, unknown>) => void) => {
       hoisted.emitBidPlaced = onEvent;
+    },
+  ),
+  useListingLifecycleChangedSubscription: vi.fn(
+    (_listingId: string, onEvent: (event: Record<string, unknown>) => void) => {
+      hoisted.emitLifecycleChanged = onEvent;
     },
   ),
 }));
@@ -71,10 +92,13 @@ function createListingDetail(
     currentPriceCents: 45000,
     minimumNextBidCents: 45000,
     bidCount: 0,
+    outcome: null,
     highestBidderId: null,
     viewerBidStatus: "none",
     canPlaceBid: true,
     reservePriceCents: null,
+    winnerUserId: null,
+    winningBidId: null,
     aiDescriptionGenerationCount: 0,
     startsAt: null,
     endsAt: new Date("2026-04-10T12:00:00.000Z"),
@@ -85,6 +109,13 @@ function createListingDetail(
 }
 
 describe("ListingDetailLiveView", () => {
+  beforeEach(() => {
+    hoisted.refresh.mockReset();
+    hoisted.emitBidPlaced = null;
+    hoisted.emitLifecycleChanged = null;
+    vi.useRealTimers();
+  });
+
   it("reacts to bid.placed updates", async () => {
     render(
       <ListingDetailLiveView
@@ -132,5 +163,100 @@ describe("ListingDetailLiveView", () => {
     expect(
       screen.queryByRole("button", { name: "Publish" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("locks bidding locally at zero and refreshes once", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-10T11:59:59.000Z"));
+
+    render(
+      <ListingDetailLiveView
+        initialListing={createListingDetail({
+          endsAt: new Date("2026-04-10T12:00:00.000Z"),
+        })}
+        viewerId="buyer-1"
+      />,
+    );
+
+    expect(screen.getByText("Place A Bid")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+
+    expect(screen.getByText("Auction Finalizing")).toBeInTheDocument();
+    expect(screen.getAllByText("Auction closing now").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByText("Current 45000")).not.toBeInTheDocument();
+    expect(hoisted.refresh).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(hoisted.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconciles lifecycle updates into the final ended state", async () => {
+    render(
+      <ListingDetailLiveView
+        initialListing={createListingDetail()}
+        viewerId="buyer-1"
+      />,
+    );
+
+    await act(async () => {
+      hoisted.emitLifecycleChanged?.({
+        listingId: "listing-1",
+        status: "ended",
+        outcome: "sold",
+        endedAt: "2026-04-10T12:00:00.000Z",
+        winnerUserId: "buyer-2",
+        winningBidId: "bid-9",
+        currentBidCents: 52_000,
+        bidCount: 3,
+      });
+    });
+
+    expect(screen.getByText("Auction Result")).toBeInTheDocument();
+    expect(screen.getAllByText("Winning bid confirmed").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByText("Current 45000")).not.toBeInTheDocument();
+  });
+
+  it("shows seller-only reserve_not_met messaging while suppressing it for buyers", () => {
+    const { rerender } = render(
+      <ListingDetailLiveView
+        initialListing={createListingDetail({
+          status: "ended",
+          outcome: "reserve_not_met",
+          bidCount: 2,
+        })}
+        viewerId="seller-1"
+      />,
+    );
+
+    expect(screen.getAllByText("Reserve Not Met").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("The reserve was not met").length,
+    ).toBeGreaterThan(0);
+
+    rerender(
+      <ListingDetailLiveView
+        initialListing={createListingDetail({
+          status: "ended",
+          outcome: "reserve_not_met",
+          bidCount: 2,
+        })}
+        viewerId="buyer-1"
+      />,
+    );
+
+    expect(screen.queryByText("Reserve Not Met")).not.toBeInTheDocument();
+    expect(screen.getAllByText("This lot did not sell").length).toBeGreaterThan(
+      0,
+    );
   });
 });

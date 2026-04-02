@@ -21,11 +21,13 @@ import { toast } from "sonner";
 import { formatListingPrice } from "@/features/listings/utils";
 import {
   ABLY_LISTING_EVENT_NAME,
+  ABLY_LISTING_LIFECYCLE_EVENT_NAME,
   ABLY_OUTBID_EVENT_NAME,
   type AuctionOutbidEvent,
   getListingChannelName,
   getUserChannelName,
   type ListingBidPlacedEvent,
+  type ListingLifecycleChangedEvent,
 } from "@/features/realtime/events";
 import { getRealtimeConnectionMode } from "@/features/realtime/policy";
 
@@ -217,6 +219,17 @@ export function useListingBidPlacedSubscription(
   useRealtimeEventSubscription<ListingBidPlacedEvent>(
     getListingChannelName(listingId),
     ABLY_LISTING_EVENT_NAME,
+    onEvent,
+  );
+}
+
+export function useListingLifecycleChangedSubscription(
+  listingId: string,
+  onEvent: (event: ListingLifecycleChangedEvent) => void,
+) {
+  useRealtimeEventSubscription<ListingLifecycleChangedEvent>(
+    getListingChannelName(listingId),
+    ABLY_LISTING_LIFECYCLE_EVENT_NAME,
     onEvent,
   );
 }
