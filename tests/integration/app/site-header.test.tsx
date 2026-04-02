@@ -30,6 +30,16 @@ vi.mock("@/components/user-nav", () => ({
   UserNav: () => <div>User nav</div>,
 }));
 
+vi.mock("@/features/listings/components/auction-lifecycle-dev-button", () => ({
+  AuctionLifecycleDevButton: () => (
+    <div data-testid="dev-lifecycle-trigger">Lifecycle trigger</div>
+  ),
+}));
+
+vi.mock("@/features/listings/lifecycle-actions", () => ({
+  runAuctionLifecycleDevAction: vi.fn(),
+}));
+
 describe("SiteHeader", () => {
   beforeEach(() => {
     hoisted.getSession.mockReset();
@@ -118,5 +128,27 @@ describe("SiteHeader", () => {
     );
 
     expect(hoisted.push).toHaveBeenCalledWith("/listings");
+  });
+
+  it("renders the dev lifecycle trigger outside production", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+
+    const { SiteHeader } = await import("@/components/site-header");
+
+    render(await SiteHeader());
+
+    expect(screen.getByTestId("dev-lifecycle-trigger")).toBeInTheDocument();
+  });
+
+  it("hides the dev lifecycle trigger in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    const { SiteHeader } = await import("@/components/site-header");
+
+    render(await SiteHeader());
+
+    expect(
+      screen.queryByTestId("dev-lifecycle-trigger"),
+    ).not.toBeInTheDocument();
   });
 });

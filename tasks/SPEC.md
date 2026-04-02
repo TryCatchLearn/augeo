@@ -546,59 +546,39 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
 ## Phase 5 - Auction Finalization and Notifications
 
-Objective: automatically end auctions, determine outcomes correctly, and notify affected users.
+Objective: automate auction lifecycle transitions, surface time-sensitive auction endings in the UI, and add persistent in-app notifications with a live navbar inbox.
 
-### Scope
+### Phase 5 Summary
 
-- Activate scheduled listings whose `startsAt` has passed.
-- Detect listings whose end time has passed.
-- Finalize auctions idempotently.
-- Mark sold, unsold, or reserve-not-met outcomes.
-- Persist winner information when applicable.
-- Notify seller and highest bidder of the result.
+Phase 5 is split into four sequential planning and implementation tracks. `5A` introduces one shared auction lifecycle engine behind a single protected cron endpoint plus a dev-only manual trigger in the navbar. That work owns scheduled-to-active transitions, expired-auction finalization, winner persistence, idempotent reruns, and lifecycle realtime events.
 
-### Finalization Rules
+`5B` adds a shared countdown timer for listing cards and listing detail views. The UI must show urgency as auctions approach zero, switch immediately into local ended/finalizing rendering when the countdown reaches zero, and then reconcile against server-confirmed lifecycle state without exposing reserve-not-met publicly to non-sellers.
 
-- No bids: set `status = ended`, `outcome = unsold`
-- Highest bid below reserve: set `status = ended`, `outcome = reserve_not_met`
-- Highest valid bid meeting reserve or no reserve: set `status = ended`, `outcome = sold`
-- Finalization must not produce duplicate notifications or conflicting winners if run multiple times.
+`5C` adds DB-backed notifications and live toast delivery. Outbid, auction-won, item-sold, and item-not-sold notifications are persisted exactly once, then published over the existing authenticated user realtime channel so authenticated users receive deduped sonner toasts anywhere in the app. Email remains out of scope.
 
-### Notification Strategy
+`5D` adds the authenticated navbar notification bell and recent inbox. The bell shows an unread badge, opens a popover with the 10 most recent notifications, supports mark-one and mark-all-read flows, and stays in sync with live notification events.
 
-- Required: in-app notifications stored in the DB.
-- Optional later enhancement: email notifications after mail infrastructure exists.
-- Notification payloads should be typed by event kind for clean dashboard rendering.
+### Phase 5 Sub-Phases
 
-### Job Design
-
-- Protected API route or server function for auction lifecycle processing.
-- Scheduled in production by cron-job.org calling the protected endpoint.
-- Manual local trigger supported for development and testing.
-
-### Acceptance Criteria
-
-- Scheduled listings transition to `active` automatically when `startsAt <= now`.
-- Expired active auctions transition to a final state automatically.
-- Finalized listings end with `status = ended` and the correct outcome.
-- Winner and seller notifications are created exactly once.
-- Re-running the finalization job is safe.
+- `5A` Auction lifecycle engine, protected endpoint, and dev trigger
+- `5B` Countdown timer UI and ended-state rendering
+- `5C` Persistent notification creation and live toast delivery
+- `5D` Navbar notification bell, recent inbox, and read actions
 
 ### Test Requirements
 
-- Unit tests for activation/finalization decision logic and notification payload building.
-- Integration tests for scheduled-to-active transitions.
-- Integration tests for sold, no-bid, and reserve-not-met outcomes.
-- Integration tests for idempotent re-run behavior.
-- 100% integration coverage for auction closure workflows.
+- Unit tests for lifecycle decision logic, countdown urgency helpers, notification payload builders, and read-state helpers.
+- Integration and client tests for protected lifecycle execution, scheduled activation, sold/unsold/reserve-not-met closure, countdown zero-state rendering, live notification delivery, navbar inbox behavior, and idempotent reruns.
+- 100% integration coverage for auction closure workflows before Phase 5 acceptance.
 
 ### Phase 5 Tracker
 
 - [ ] Detailed phase spec approved
-- [ ] Lifecycle job contract finalized
-- [ ] Notification model finalized
-- [ ] Auction lifecycle processing implemented
-- [ ] Winner/seller notifications implemented
+- [ ] `tasks/TODO.md` execution plan finalized
+- [ ] `5A` lifecycle engine and protected endpoint finalized
+- [ ] `5B` countdown timer UI and ended-state rendering finalized
+- [ ] `5C` persistent notification creation and live toast delivery finalized
+- [ ] `5D` navbar bell, inbox, and read actions finalized
 - [ ] Unit tests completed
 - [ ] Integration tests completed
 - [ ] 80%+ coverage met

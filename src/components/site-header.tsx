@@ -3,7 +3,9 @@ import Link from "next/link";
 import { LinkButton } from "@/components/ui/button";
 import { UserNav } from "@/components/user-nav";
 import { getSession } from "@/features/auth/session";
+import { AuctionLifecycleDevButton } from "@/features/listings/components/auction-lifecycle-dev-button";
 import { NavbarSearch } from "@/features/listings/components/navbar-search";
+import { runAuctionLifecycleDevAction } from "@/features/listings/lifecycle-actions";
 
 const navLinks = [
   {
@@ -31,7 +33,7 @@ export async function SiteHeader() {
             </span>
           </Link>
 
-          <div className="order-3 w-full md:order-none md:justify-self-center">
+          <div className="order-3 w-full md:order-0 md:justify-self-center">
             <NavbarSearch />
           </div>
 
@@ -47,6 +49,12 @@ export async function SiteHeader() {
                 </Link>
               ))}
             </nav>
+
+            {process.env.NODE_ENV !== "production" ? (
+              <AuctionLifecycleDevButton
+                runAction={runAuctionLifecycleDevAction}
+              />
+            ) : null}
 
             {session ? (
               <UserNav

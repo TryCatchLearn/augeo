@@ -1,8 +1,15 @@
 import { relations, sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  type AnySQLiteColumn,
+  index,
+  integer,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 import {
   listingCategories,
   listingConditions,
+  listingOutcomes,
   listingStatuses,
 } from "@/features/listings/domain";
 
@@ -109,6 +116,16 @@ export const listing = sqliteTable(
     bidCount: integer("bid_count").default(0).notNull(),
     version: integer("version").default(0).notNull(),
     reservePriceCents: integer("reserve_price_cents"),
+    outcome: text("outcome", { enum: listingOutcomes }),
+    winnerUserId: text("winner_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    winningBidId: text("winning_bid_id").references(
+      (): AnySQLiteColumn => bid.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     aiDescriptionGenerationCount: integer("ai_description_generation_count")
       .default(0)
       .notNull(),
@@ -135,7 +152,7 @@ export const listingImage = sqliteTable(
     id: text("id").primaryKey(),
     listingId: text("listing_id")
       .notNull()
-      .references(() => listing.id, { onDelete: "cascade" }),
+      .references((): AnySQLiteColumn => listing.id, { onDelete: "cascade" }),
     publicId: text("public_id").notNull(),
     url: text("url").notNull(),
     isMain: integer("is_main", { mode: "boolean" }).default(false).notNull(),
@@ -196,6 +213,14 @@ export const listingRelations = relations(listing, ({ one, many }) => ({
   seller: one(user, {
     fields: [listing.sellerId],
     references: [user.id],
+  }),
+  winner: one(user, {
+    fields: [listing.winnerUserId],
+    references: [user.id],
+  }),
+  winningBid: one(bid, {
+    fields: [listing.winningBidId],
+    references: [bid.id],
   }),
   images: many(listingImage),
   bids: many(bid),

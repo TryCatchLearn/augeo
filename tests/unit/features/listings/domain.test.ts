@@ -12,12 +12,16 @@ import {
   canViewListingDetail,
   getBidIncrementCents,
   getCurrentPriceCents,
+  getListingClosureResult,
   getMinimumNextBidCents,
   getNextMainImageIdAfterDelete,
   getPublishedStatus,
   getViewerBidStatus,
+  isListingActivationEligible,
+  isListingClosureEligible,
   isListingStatus,
   listingConditions,
+  listingOutcomes,
   listingStatuses,
   normalizeSmartListingCategory,
   normalizeSuggestedStartingPriceCents,
@@ -31,6 +35,7 @@ import {
 describe("listing status rules", () => {
   it("exports the supported listing enums", () => {
     expect(listingStatuses).toEqual(["draft", "scheduled", "active", "ended"]);
+    expect(listingOutcomes).toEqual(["sold", "unsold", "reserve_not_met"]);
     expect(listingConditions).toEqual([
       "new",
       "like_new",
@@ -58,6 +63,117 @@ describe("listing status rules", () => {
     expect(
       canReceiveBids("active", new Date("2026-03-21T11:59:59.000Z"), now),
     ).toBe(false);
+  });
+
+  it("checks scheduled activation eligibility from startsAt", () => {
+    const now = new Date("2026-04-02T12:00:00.000Z");
+
+    expect(
+      isListingActivationEligible(
+        "scheduled",
+        new Date("2026-04-02T11:59:59.000Z"),
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isListingActivationEligible(
+        "scheduled",
+        new Date("2026-04-02T12:00:01.000Z"),
+        now,
+      ),
+    ).toBe(false);
+    expect(isListingActivationEligible("scheduled", null, now)).toBe(false);
+    expect(
+      isListingActivationEligible(
+        "active",
+        new Date("2026-04-02T11:59:59.000Z"),
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("checks active closure eligibility from endsAt", () => {
+    const now = new Date("2026-04-02T12:00:00.000Z");
+
+    expect(
+      isListingClosureEligible(
+        "active",
+        new Date("2026-04-02T12:00:00.000Z"),
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isListingClosureEligible(
+        "active",
+        new Date("2026-04-02T12:00:01.000Z"),
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      isListingClosureEligible(
+        "scheduled",
+        new Date("2026-04-02T11:59:59.000Z"),
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("selects sold, unsold, and reserve-not-met outcomes with winner rules", () => {
+    expect(
+      getListingClosureResult({
+        reservePriceCents: null,
+        highestBid: {
+          id: "bid-1",
+          bidderId: "buyer-1",
+          amountCents: 15_000,
+        },
+      }),
+    ).toEqual({
+      outcome: "sold",
+      winnerUserId: "buyer-1",
+      winningBidId: "bid-1",
+    });
+
+    expect(
+      getListingClosureResult({
+        reservePriceCents: null,
+        highestBid: null,
+      }),
+    ).toEqual({
+      outcome: "unsold",
+      winnerUserId: null,
+      winningBidId: null,
+    });
+
+    expect(
+      getListingClosureResult({
+        reservePriceCents: 20_000,
+        highestBid: {
+          id: "bid-2",
+          bidderId: "buyer-2",
+          amountCents: 19_500,
+        },
+      }),
+    ).toEqual({
+      outcome: "reserve_not_met",
+      winnerUserId: null,
+      winningBidId: null,
+    });
+  });
+
+  it("returns the same closure result for idempotent reruns", () => {
+    const input = {
+      reservePriceCents: 30_000,
+      highestBid: {
+        id: "bid-9",
+        bidderId: "buyer-9",
+        amountCents: 30_000,
+      },
+    } as const;
+
+    expect(getListingClosureResult(input)).toEqual(
+      getListingClosureResult(input),
+    );
   });
 
   it("allows returning to draft only before any bids exist", () => {

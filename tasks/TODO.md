@@ -1,373 +1,445 @@
-# Phase 4 Execution TODO
+# Phase 5 Execution TODO
 
-Created: 2026-03-31
+Created: 2026-04-02
 Status: Planning complete, implementation pending
 
 ## Objective
 
-Deliver Phase 4 bidding and realtime updates as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
+Deliver Phase 5 auction lifecycle automation, countdown-driven ended-state UI, persistent notifications, live toast delivery, and the navbar notification inbox as a sequence of implementable sub-phases that can be executed in separate sessions without reopening `tasks/SPEC.md`.
 
 ## Execution Order
 
-- `4A` blocks `4B`, `4C`, and `4D`.
-- `4B` blocks `4C` and `4D`.
-- `4C` and `4D` can land independently after `4B`.
+- `5A` blocks `5B` and `5C`.
+- `5C` blocks `5D`.
+- `5B` can land before or after `5C`, but the intended rollout order remains `5A` -> `5B` -> `5C` -> `5D`.
 
 ## Locked Decisions
 
-- `tasks/TODO.md` is the active standalone execution document for Phase 4.
+- `tasks/TODO.md` is the active standalone execution document for Phase 5.
 - `tasks/SPEC.md` remains the concise phase summary and tracker.
-- Phase 4 introduces bidding and realtime auction-state updates, but it does not add auction finalization or persistent notification inbox data.
-- Realtime uses Ably over websockets with token auth.
-- The existing server-side Ably secret is `ABLY_API_KEY`; it must remain server-only.
-- Browser clients authenticate through a server-issued Ably token endpoint/route and must never receive the raw API key.
-- There must never be more than one Ably connection per browser tab.
-- Authenticated users hold a single global Ably connection while authenticated.
-- Guests connect only when routed to `/listings` or `/listings/[id]`.
-- Guests disconnect when they leave those routes.
-- `/listings/[id]/edit` does not count as a public listings route for guest realtime access.
-- Guests may subscribe only to `listing:*`.
-- Authenticated users may subscribe to `listing:*` and `user:{id}`.
-- Browser clients never publish directly to Ably.
-- Phase 4 does not include polling fallback; if realtime is unavailable, the temporary fallback is normal refresh/navigation behavior.
-- Outbid notifications in Phase 4 are realtime toast notifications only.
-- DB-backed notifications remain Phase 5 work.
-- `startingBidCents` remains the opening price only.
-- Everywhere that shows the live/current price must use `currentBidCents ?? startingBidCents`.
-- Listing cards must move from Phase 3 placeholder pricing to real cached bid state in Phase 4.
-- Bid history is newest-first and uses the stored bidder `user.name`.
-- Seller controls remain available only while `bidCount === 0`.
-- Once the first bid exists, seller controls are replaced by a read-only auction activity panel plus bid history.
-- The current highest bidder may place a higher bid as long as the new bid satisfies the next minimum increment.
-- Bid increments are locked to the following ladder:
-  - current bid `< $100`: `+$1`
-  - `$100 - $499.99`: `+$5`
-  - `$500 - $999.99`: `+$10`
-  - `$1,000 - $4,999.99`: `+$25`
-  - `$5,000+`: `+$50`
+- Email notifications remain out of scope.
+- Production background processing uses cron-job.org calling one protected endpoint every minute.
+- Add `AUCTION_LIFECYCLE_CRON_SECRET` for cron authentication.
+- The protected lifecycle route is `POST /api/auctions/lifecycle`.
+- The route authenticates only through `Authorization: Bearer <secret>`.
+- Browser clients must never receive the cron secret.
+- Add one shared lifecycle service that is used by both the cron route and the dev-only manual trigger.
+- The manual trigger is a dev-only navbar icon button rendered only when `NODE_ENV !== "production"`.
+- The manual trigger must be guarded on the server side as well, not only hidden in the UI.
+- The manual trigger calls the same lifecycle service through a dev-only server action and shows a sonner summary toast.
+- Phase 5 extends the `listing` persistence model with:
+  - `outcome` enum `sold | unsold | reserve_not_met`
+  - `winnerUserId` nullable
+  - `winningBidId` nullable
+- Phase 5 adds a `notification` table with:
+  - `id`
+  - `userId`
+  - `type`
+  - `dedupeKey`
+  - `payload`
+  - `readAt` nullable
+  - `createdAt`
+- `notification.dedupeKey` must be unique.
+- Add indexes that support unread-count reads and recent-notification reads by `userId`.
+- Realtime keeps the shared Ably connection from Phase 4.
+- Add `listing.lifecycle.changed` on `listing:{id}`.
+- Add `notification.created` on `user:{id}`.
+- Query/view models must be extended for:
+  - listing card lifecycle state and seller-safe/public-safe outcome rendering
+  - listing detail lifecycle state and seller-safe/public-safe outcome rendering
+  - notification unread count
+  - 10 recent notifications
+- Public UI must not expose `reserve_not_met`.
+- Seller-facing UI and seller notifications must preserve the real `reserve_not_met` outcome.
+- Countdown zero is a client-visible boundary:
+  - when `endsAt <= now`, listing cards and detail views switch immediately into local ended/finalizing UI
+  - local UI must block new bids immediately
+  - local ended/finalizing state persists until fresh server data or a lifecycle event confirms the terminal state
+- Clicking a toast CTA does not mark a notification as read in Phase 5.
+- Only explicit inbox actions mark notifications read in Phase 5.
 
 ## Shared Interfaces And Contracts
 
-### Schema and persistence contract
+### Lifecycle route and service contract
 
-- Add a new `bid` table.
-- `bid` columns are locked to:
-  - `id`
-  - `listingId`
-  - `bidderId`
-  - `amountCents`
-  - `createdAt`
-- Add cached bidding fields to `listing`:
-  - `currentBidCents` nullable
-  - `bidCount` default `0`
-- `currentBidCents` is nullable so listings with no bids can keep using `startingBidCents` as the displayed fallback.
-- Add indexes that support:
-  - bid history reads by listing ordered newest-first
-  - highest-bid lookup by listing
-  - bidder lookups for future dashboard work where practical
-- Bid placement must be transactional:
-  - re-read the listing and current highest bid inside the transaction
-  - validate against that fresh state
-  - insert the accepted bid
-  - update `listing.currentBidCents` and `listing.bidCount`
-  - commit before any Ably publish occurs
+- Create a shared lifecycle service in a server-only boundary instead of embedding lifecycle logic in the route or navbar action.
+- The lifecycle service accepts `now` for testability and returns a summary object with:
+  - `activatedCount`
+  - `closedCount`
+  - `soldCount`
+  - `unsoldCount`
+  - `reserveNotMetCount`
+- The route returns that summary as JSON.
+- The route must use `Cache-Control: no-store`.
+- Unauthorized or malformed lifecycle requests return a non-2xx response and do not run any lifecycle work.
+- The dev-only server action returns the same summary shape so the navbar trigger can render a consistent toast.
 
-### Query and view-model contract
+### Lifecycle state transition contract
 
-- Extend listing card data so cards expose:
-  - `currentPriceCents`
-  - `bidCount`
-  - existing display fields already used by the grid
-- Extend listing detail data so the detail page can server-render before realtime attaches.
-- Listing detail data must include:
-  - listing identity and seller metadata already present
-  - `startingBidCents`
-  - `currentBidCents`
-  - `currentPriceCents`
-  - `minimumNextBidCents`
-  - `bidCount`
-  - `highestBidderId`
-  - `viewerBidStatus` as `highest | outbid | none`
-  - `canPlaceBid`
-  - full bid history rows with bidder name, amount, and timestamp
-- Bid history is displayed newest bid first.
-- Seller-control logic must consume the real `bidCount` from the query layer rather than the current placeholder `0`.
-
-### Action and validation contract
-
-- Add a dedicated bid placement server action.
-- Add a dedicated bid input schema for the action payload.
-- The bid action is authoritative for all business-rule enforcement.
-- Bid validation rules are locked to:
-  - viewer must be authenticated
-  - seller cannot bid on their own listing
-  - listing must exist
-  - listing must be `active`
-  - listing must not be expired
-  - first bid must be at least `startingBidCents`
-  - later bids must be at least `currentBidCents + requiredIncrement`
-  - highest bidder can raise their own bid if they satisfy the same next-minimum rule
-- The bid form must surface clear user-facing action errors for rejected bids.
+- Lifecycle processing runs in two passes, in this order:
+  - activate scheduled listings whose `startsAt <= now`
+  - close active listings whose `endsAt <= now`
+- Activation rules:
+  - only `scheduled` listings are eligible
+  - activation changes `status` to `active`
+  - activation never changes `endsAt`, reserve, bids, or winner fields
+- Closure rules:
+  - only `active` listings are eligible
+  - closure changes `status` to `ended`
+  - no bids -> `outcome = unsold`
+  - highest bid below reserve -> `outcome = reserve_not_met`
+  - reserve met or no reserve -> `outcome = sold`
+  - `winnerUserId` and `winningBidId` are set only for sold listings
+  - `winnerUserId` and `winningBidId` remain `null` for unsold and reserve-not-met listings
+- Lifecycle processing must be idempotent:
+  - already-activated listings are skipped
+  - already-ended listings are skipped
+  - reruns must not change an already-finalized outcome
+  - reruns must not create duplicate notifications
 
 ### Realtime event contract
 
-- Listing channel name: `listing:{id}`
-- User channel name: `user:{id}`
-- Listing event name: `bid.placed`
-- User event name: `auction.outbid`
-- `bid.placed` payload must include:
+- Listing lifecycle channel name remains `listing:{id}`.
+- User notification channel name remains `user:{id}`.
+- Add listing event name `listing.lifecycle.changed`.
+- Add user event name `notification.created`.
+- `listing.lifecycle.changed` payload must include:
   - `listingId`
+  - `status`
+  - `outcome`
+  - `endedAt`
+  - `winnerUserId`
+  - `winningBidId`
   - `currentBidCents`
   - `bidCount`
-  - `minimumNextBidCents`
-  - `highestBidderId`
-  - `bid`
-    - `id`
-    - `bidderId`
-    - `bidderName`
-    - `amountCents`
-    - `createdAt`
-- `auction.outbid` payload must include:
+- Publish `listing.lifecycle.changed` only after the activation or closure transaction commits.
+- `notification.created` payload must include enough data to render a toast and update the inbox without a forced full refresh:
+  - `notificationId`
+  - `type`
   - `listingId`
-  - `listingTitle`
-  - `currentBidCents`
-  - `minimumNextBidCents`
-  - `bidCount`
   - `listingUrl`
-  - enough event identity to dedupe reconnect/replay toasts, using the accepted bid id
-- `auction.outbid` is published only when an accepted bid displaces a different previous highest bidder.
-- `auction.outbid` is not published for:
-  - the first bid on a listing
-  - a bidder increasing their own already-highest bid
-  - unauthenticated viewers
+  - `title`
+  - `message`
+  - `createdAt`
+  - `readAt`
+  - optional type-specific icon/outcome metadata needed by the client mapper
+- Publish `notification.created` only after the notification row commits.
 
-### Realtime client contract
+### Notification persistence and read contract
 
-- Add a root client-side realtime provider mounted from the app layout.
-- The provider owns the single Ably client for the tab.
-- The provider is responsible for:
-  - deciding when a connection should exist
-  - exposing listing-channel subscription utilities
-  - exposing authenticated user-channel subscription utilities
-  - ensuring connection reuse across cards, detail pages, and global toast handling
-- Listing cards and listing detail UI must consume shared provider state/utilities and must not create ad hoc Ably clients.
+- Add a dedicated notifications feature module for typed payload builders, persistence helpers, queries, display mappers, and read actions.
+- Lock notification types to:
+  - `outbid`
+  - `auction_won`
+  - `item_sold`
+  - `item_not_sold`
+- Notification payloads must be type-safe and sufficient to:
+  - render a toast
+  - render the bell inbox row
+  - navigate back to the listing
+- Each persisted notification must have a deterministic `dedupeKey`.
+- `dedupeKey` generation rules:
+  - outbid: tied to the accepted bid that displaced the previous leader plus the recipient
+  - auction lifecycle notifications: tied to the finalized listing outcome plus the recipient
+- Add actions for:
+  - `markNotificationRead(notificationId)`
+  - `markAllNotificationsRead()`
+- `markAllNotificationsRead()` affects all unread notifications for the session user, not only the visible 10 rows.
 
-## 4A - Bid Model, Bid Form UI, And Bid History
+### Query and view-model contract
+
+- Extend listing card data with:
+  - `status`
+  - `outcome`
+  - seller-safe/public-safe ended-state copy inputs
+- Extend listing detail data with:
+  - `status`
+  - `outcome`
+  - `winnerUserId`
+  - `winningBidId`
+  - seller-safe/public-safe ended-state copy inputs
+- Add notification query outputs for authenticated navbar rendering:
+  - unread count
+  - 10 recent notifications sorted newest-first
+- The unread badge shows the total unread count capped as `9+`.
+- Each notification row in the inbox must expose:
+  - `id`
+  - `type`
+  - `title`
+  - `message`
+  - `listingId`
+  - `listingUrl`
+  - `createdAt`
+  - `readAt`
+  - `isRead`
+
+## 5A - Auction Lifecycle Engine And Protected Endpoint
 
 Status: Not started
 
 ### Deliverables
 
-- Bid schema and migration finalized.
-- Cached listing bid fields finalized.
-- Bid placement action and validation contract finalized.
-- Listing detail page replaces the buyer placeholder with a real bid form.
-- Listing detail page includes a bid history panel beneath the bid panel.
-- Seller controls are hidden after the first accepted bid.
+- Shared server-side lifecycle service finalized.
+- Protected cron route finalized.
+- Dev-only navbar trigger contract finalized.
+- Listing lifecycle persistence fields finalized.
+- `listing.lifecycle.changed` publish contract finalized.
 
 ### Implementation tasks
 
-- Update the implementation docs to add the `bid` table and the new cached listing columns.
-- Require Drizzle schema, SQL migration, and any affected test harness expectations to land together.
-- Document the query-layer switch from placeholder bid data to persisted bid state.
-- Add and document domain helpers for:
-  - bid eligibility against listing status and expiration
-  - increment lookup from the locked price ladder
-  - minimum-next-bid calculation
-  - viewer bid status projection
-- Document that current price is derived as:
-  - `currentBidCents ?? startingBidCents`
-- Document the bid form behavior:
-  - buyers only
-  - prefilled with the minimum acceptable bid
-  - action error shown inline
-  - successful submission relies on normal server-action refresh behavior in `4A`
-- Document the listing-detail right-column layout:
-  - top card is the bid form for eligible buyers or seller activity panel for sellers/no-bid sellers
-  - bid history sits directly underneath
-  - bid history panel height shows about five rows before scrolling
-- Document seller behavior:
-  - `bidCount === 0`: existing seller controls remain
-  - `bidCount > 0`: seller controls are replaced with read-only auction activity information
-- Document that return-to-draft checks must use real persisted `bidCount`.
-- Document that bid history uses newest-first ordering and shows:
-  - bidder name
-  - amount
-  - timestamp
-- Lock the initial viewer bid status values to:
-  - `highest` when the viewer is the current highest bidder
-  - `outbid` when the viewer has at least one bid on the listing but is not highest
-  - `none` otherwise
+- Update implementation docs to add the new `listing` lifecycle fields:
+  - `outcome`
+  - `winnerUserId`
+  - `winningBidId`
+- Document the Drizzle schema, checked-in SQL migration, seed/test fixture updates, and affected query/view-model updates as one inseparable change set whenever Phase 5 implementation begins.
+- Document the shared lifecycle service boundary and require both the cron route and dev trigger to call it instead of duplicating logic.
+- Document route auth requirements:
+  - `POST` only
+  - bearer secret only
+  - no browser/session auth path
+  - no public access
+- Document dev-trigger requirements:
+  - navbar icon only in development
+  - server action rejects non-development execution
+  - returns the same summary shape as the route
+  - shows a sonner success/error summary for quick manual verification
+- Document lifecycle pass ordering:
+  - activation pass first
+  - closure pass second
+- Document the activation filter:
+  - `status = scheduled`
+  - `startsAt IS NOT NULL`
+  - `startsAt <= now`
+- Document the closure filter:
+  - `status = active`
+  - `endsAt <= now`
+- Document finalization outcome rules and winner-field behavior exactly.
+- Document idempotency requirements for reruns and partial retries.
+- Document `listing.lifecycle.changed` publishing rules:
+  - publish after commit only
+  - publish once per changed listing
+  - include enough terminal-state data for open cards and detail pages to reconcile without guessing
 
 ### Test tasks
 
 - Unit tests for:
-  - bid increment tier mapping
-  - minimum-next-bid calculation
-  - bid eligibility by listing status and expiration
-  - viewer bid status projection
+  - scheduled activation eligibility
+  - closure eligibility
+  - outcome selection for sold, unsold, and reserve-not-met
+  - winner-field assignment rules
+  - idempotent rerun outcome calculation
 - Integration tests for:
-  - valid first bid
-  - valid later bid
-  - highest-bidder self-raise success
-  - unauthenticated rejection
-  - seller self-bid rejection
-  - inactive listing rejection
-  - expired listing rejection
-  - insufficient increment rejection
-  - listing detail history ordering newest-first
-  - seller controls disappearing after the first bid
+  - route rejects missing bearer secret
+  - route rejects incorrect bearer secret
+  - scheduled listing activation
+  - sold closure
+  - unsold closure
+  - reserve-not-met closure
+  - rerun safety with no duplicate state changes
+  - dev trigger hidden/blocked outside development
 
 ### Exit criteria
 
-- The docs leave no ambiguity about schema changes, transactional bid placement, or server-side validation.
-- The docs fully specify how the bid form and bid history replace the Phase 1 placeholder UI.
-- The docs fully specify when sellers lose their mutable controls.
+- The docs leave no ambiguity about lifecycle entrypoints, auth, pass ordering, or idempotent closure rules.
+- The docs fully specify the summary payload and the realtime lifecycle event contract.
 
-## 4B - Ably Setup And Listing Channel
+## 5B - Countdown Timer UI And Ended-State Rendering
 
 Status: Not started
 
 ### Deliverables
 
-- Server-only Ably helpers finalized.
-- Browser token-auth flow finalized.
-- Shared realtime provider finalized.
-- Listing detail page subscribes to `listing:{id}` and reacts to `bid.placed`.
+- Shared countdown component contract finalized.
+- Listing card ended-state rendering finalized.
+- Listing detail ended-state rendering finalized.
+- Local zero-time bid lockout finalized.
 
 ### Implementation tasks
 
-- Document the Ably integration boundaries:
-  - server-only Ably publish/auth code
-  - browser-side token-auth client code
-  - shared provider mounted from app layout
-- Lock env usage to `ABLY_API_KEY` on the server.
-- Document the Ably token endpoint/route requirement and explicitly forbid exposing `ABLY_API_KEY` to the client.
-- Document token capability rules:
-  - guests: subscribe to `listing:*` only
-  - authenticated users: subscribe to `listing:*` and `user:{id}`
-  - no browser publish capability
-- Document the single-connection policy:
-  - authenticated user session owns the connection globally
-  - guests connect only on `/listings` and `/listings/[id]`
-  - guests disconnect off those routes
-  - a pre-existing authenticated connection prevents any route-scoped guest connection logic from creating another client
-- Document the root provider responsibilities:
-  - own and cache the Ably client instance
-  - connect/disconnect according to auth and route state
-  - expose listing subscription hooks/utilities
-  - expose user-channel subscription hooks/utilities for `4D`
-- Document the listing detail subscription behavior:
-  - subscribe to `listing:{id}`
-  - react to `bid.placed`
-  - update current price
-  - update bid count
-  - update minimum next bid
-  - update viewer bid status
-  - prepend the new bid to history
-  - lock seller controls once `bidCount > 0`
-- Document that the server publishes `bid.placed` only after a successful committed bid transaction.
+- Add one shared client countdown component used by:
+  - listing cards
+  - listing detail
+- Replace the current static remaining-time text with the shared countdown UI.
+- Lock urgency tiers to:
+  - neutral when `> 24h`
+  - warning when `<= 24h`
+  - urgent when `<= 1h`
+  - critical when `<= 5m`
+  - ended when `<= 0`
+- Document that the countdown uses token-based styling rather than ad hoc colors.
+- Document card behavior at zero:
+  - immediately stop showing an active countdown
+  - switch to local ended/finalizing copy
+  - no longer present the listing as bid-eligible
+  - issue one refresh attempt so server truth can catch up
+- Document detail-page behavior at zero:
+  - immediately remove or disable the bid form locally
+  - replace the time display with ended/finalizing state
+  - preserve the local terminal UI until fresh server data or `listing.lifecycle.changed` arrives
+- Document reconciliation behavior:
+  - if refreshed data or realtime confirms `ended`, render the final ended state
+  - if seller sees `reserve_not_met`, show seller-specific outcome copy
+  - if non-seller sees `reserve_not_met`, render generic ended/unsold copy
+- Document that countdown zero does not directly mutate the database and does not bypass lifecycle processing.
 
 ### Test tasks
 
 - Unit tests for:
-  - Ably token capability generation
-  - route-to-connection policy for guests and authenticated users
+  - countdown formatting across days, hours, minutes, and ended
+  - urgency-tier selection thresholds
 - Client tests for:
-  - one shared Ably client per tab
-  - guest connect/disconnect on route changes
-  - authenticated connection reuse across pages
-- Detail-page subscription tests proving `bid.placed` updates:
-  - price
-  - bid count
-  - minimum bid
-  - bid history
-  - seller lock state
+  - card zero transition
+  - detail zero transition
+  - local bid lockout at zero
+  - one-time refresh attempt when local zero is reached
+- Integration tests for:
+  - card ended-state rendering after lifecycle confirmation
+  - detail ended-state rendering after lifecycle confirmation
+  - seller-only reserve-not-met messaging
+  - public reserve-not-met suppression
+  - `listing.lifecycle.changed` reconciliation for open views
 
 ### Exit criteria
 
-- The docs fully specify the Ably auth model and connection policy.
-- The docs fully specify how listing detail state transitions from server render to realtime updates.
-- The docs leave no room for duplicate Ably clients within one tab.
+- The docs fully specify countdown urgency styling, zero-time behavior, and seller/public ended-state differences.
+- The docs make it clear that local zero-state UI is immediate but server truth still comes from lifecycle processing.
 
-## 4C - Live Listing Cards
+## 5C - Persistent Notification Creation And Live Toast Delivery
 
-Status: Completed
-
-### Deliverables
-
-- Thin client wrapper around each listing card finalized.
-- Public and dashboard grids reuse the same shared realtime connection strategy.
-- Listing cards update current price and bid count from `bid.placed`.
-
-### Implementation tasks
-
-- Document that the server-rendered card shell stays in place.
-- Document that only the live price and bid-count fragment becomes client-managed.
-- Document that each card wrapper subscribes to `listing:{id}` through the shared realtime provider.
-- Document that the wrapper updates only:
-  - `currentPriceCents`
-  - `bidCount`
-- Document that both `/listings` and `/dashboard/listings` use the same wrapper so authenticated sellers reuse the global connection.
-- Document that cards do not create direct Ably clients or bypass the provider.
-
-### Test tasks
-
-- Client tests for:
-  - price and bid-count updates after `bid.placed`
-  - unsubscribe on unmount
-  - no duplicate connection creation across multiple cards
-- Integration/app tests proving:
-  - public cards use the route-scoped guest connection behavior
-  - authenticated dashboard cards reuse the existing auth connection
-
-### Exit criteria
-
-- The docs fully specify the card wrapper responsibilities and limits.
-- The docs make it clear that cards only consume shared realtime state and never own a connection directly.
-
-## 4D - Outbid Toast Notification
-
-Status: Completed
+Status: Not started
 
 ### Deliverables
 
-- Sonner-based global toast delivery finalized.
-- Global authenticated user-channel subscription finalized.
-- Outbid toast payload and dedupe behavior finalized.
+- Notifications feature module contract finalized.
+- Notification schema and dedupe contract finalized.
+- DB-backed outbid notifications finalized.
+- Lifecycle winner/seller notifications finalized.
+- `notification.created` toast delivery finalized.
 
 ### Implementation tasks
 
-- Document the dependency addition for `sonner`.
-- Document mounting a global toaster in the app shell/layout.
-- Document that the shared realtime provider subscribes authenticated users to `user:{id}` globally.
-- Document the `auction.outbid` publish rules:
-  - publish only when a new accepted bid displaces a different previous highest bidder
-  - skip first bid
-  - skip self-rebid while still highest
+- Update the implementation docs to add the `notification` table and supporting indexes.
+- Document the notifications feature module responsibilities:
+  - typed payload builders
+  - display mappers
+  - persistence helpers
+  - queries
+  - read actions
+- Lock notification types to:
+  - `outbid`
+  - `auction_won`
+  - `item_sold`
+  - `item_not_sold`
+- Document creation rules:
+  - `outbid` created when an accepted bid displaces a different previous highest bidder
+  - `auction_won` created for the winning bidder when a listing closes as sold
+  - `item_sold` created for the seller when a listing closes as sold
+  - `item_not_sold` created for the seller when a listing closes as unsold or reserve-not-met
+- Document dedupe behavior:
+  - persisted rows must be exactly-once per recipient and business event
+  - lifecycle reruns must not create duplicates
+  - reconnect/replay toast duplicates must be deduped by persisted notification id
+- Document the Phase 4 transition:
+  - outbid toasts stop being realtime-only
+  - outbid notifications are created in the database during bid acceptance
+  - toasts now derive from `notification.created`
+- Document `notification.created` payload requirements so the client can:
+  - show the toast
+  - increment the unread badge
+  - prepend the recent inbox row
 - Document toast behavior:
-  - shown on any page while authenticated
-  - includes listing title
-  - includes the new current price
-  - includes a link to the listing
-  - dedupes replay/reconnect duplicates using the accepted bid id plus listing identity
-- Document that this work remains realtime-only in Phase 4 and does not create DB notification rows or read/unread state.
+  - shown on any authenticated page
+  - includes type-appropriate icon, title, message, and listing CTA
+  - clicking the CTA navigates only
+  - toast receipt does not change read state
 
 ### Test tasks
 
-- Client tests for:
-  - toast rendering on any authenticated page
-  - no toast for first-bid cases
-  - no toast for self-rebid while already highest
-  - dedupe on repeated event delivery
-- App/integration tests for:
-  - toast CTA target URL
-  - guest sessions never subscribing to `user:{id}`
+- Unit tests for:
+  - notification payload builders
+  - display-copy mapping
+  - dedupe-key generation
+  - per-type icon/title/message mapping
+- Integration tests for:
+  - outbid notification creation
+  - auction-won notification creation
+  - item-sold notification creation
+  - item-not-sold notification creation for both unsold and reserve-not-met outcomes
+  - lifecycle rerun safety with no duplicate notifications
+  - live toast delivery from `notification.created`
 
 ### Exit criteria
 
-- The docs fully specify when outbid toasts are published and when they are suppressed.
-- The docs fully specify the global-toast behavior without expanding scope into Phase 5 notifications.
+- The docs fully specify notification creation timing, exact-once behavior, and the move from realtime-only outbid to DB-backed notification delivery.
+- The docs fully specify the generic `notification.created` event contract used by both toast delivery and the future inbox.
+
+## 5D - Navbar Notification Bell, Recent Inbox, And Read Actions
+
+Status: Not started
+
+### Deliverables
+
+- Navbar bell contract finalized.
+- Recent notification inbox contract finalized.
+- Read-action contract finalized.
+- Live bell/inbox reconciliation contract finalized.
+
+### Implementation tasks
+
+- Add server queries for:
+  - unread count
+  - 10 recent notifications newest-first
+- Add a shadcn-style popover primitive for the notification inbox.
+- Render the bell icon only for authenticated users.
+- Document bell badge behavior:
+  - hidden when unread count is `0`
+  - raw count for `1` through `9`
+  - `9+` when count is greater than `9`
+- Document popover content:
+  - `Mark all read` action
+  - 10 recent notifications
+  - per-type icon
+  - title
+  - message
+  - relative time
+  - clear read/unread styling
+- Document row interaction:
+  - click row
+  - call `markNotificationRead`
+  - close the popover
+  - navigate to the listing
+- Document `Mark all read` interaction:
+  - affects all unread notifications for the current user
+  - updates badge and visible rows immediately after success
+- Document live-update behavior:
+  - `notification.created` increments the unread badge
+  - `notification.created` prepends the new recent item
+  - if the list already has 10 rows, drop the oldest visible row
+- Document empty-state behavior for users with no notifications.
+
+### Test tasks
+
+- Query/action tests for:
+  - unread count
+  - 10 recent notifications ordering
+  - `markNotificationRead`
+  - `markAllNotificationsRead`
+- Client tests for:
+  - live badge increment from `notification.created`
+  - live recent-row prepend behavior
+  - 10-row list trimming after a new event
+- Integration tests for:
+  - bell rendering for authenticated users only
+  - popover content
+  - read/unread styling
+  - click-to-mark-read and navigate
+  - `Mark all read` behavior
+  - unread badge capping as `9+`
+
+### Exit criteria
+
+- The docs fully specify bell rendering, inbox composition, read actions, and live badge/list reconciliation.
+- The docs leave no ambiguity about read-state ownership or the difference between toast navigation and explicit read actions.
 
 ## Final Verification Checklist
 
@@ -378,6 +450,6 @@ Status: Completed
 
 ## Completion Notes
 
-- Update `tasks/SPEC.md` tracker checkboxes as Phase 4 planning items, contracts, implementation work, and tests land.
-- Keep `tasks/TODO.md` self-sufficient; future implementation sessions should not need to reopen `tasks/SPEC.md` for execution details.
-- If Phase 4 scope changes, update this file before coding so later sessions inherit the current source of truth.
+- Keep `tasks/TODO.md` self-sufficient; implementation sessions should not need to reopen `tasks/SPEC.md`.
+- If Phase 5 scope changes, update this file before coding so later sessions inherit the current source of truth.
+- When implementation starts, update Drizzle schema, checked-in SQL migration, seed/test fixtures, and affected query/view-model tests together.

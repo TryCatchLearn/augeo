@@ -7,6 +7,10 @@ export const listingStatuses = [
 
 export type ListingStatus = (typeof listingStatuses)[number];
 
+export const listingOutcomes = ["sold", "unsold", "reserve_not_met"] as const;
+
+export type ListingOutcome = (typeof listingOutcomes)[number];
+
 export type ListingViewer = {
   sellerId: string;
   viewerId?: string | null;
@@ -68,6 +72,18 @@ export const listingStatusLabels: Record<ListingStatus, string> = {
   scheduled: "Scheduled",
   active: "Active",
   ended: "Ended",
+};
+
+export type ListingClosureBid = {
+  id: string;
+  bidderId: string;
+  amountCents: number;
+};
+
+export type ListingClosureResult = {
+  outcome: ListingOutcome;
+  winnerUserId: string | null;
+  winningBidId: string | null;
 };
 
 const listingCategoryAliases: Record<string, ListingCategory> = {
@@ -133,6 +149,56 @@ function normalizeEnumInput(value: string) {
 
 export function isListingStatus(value: string): value is ListingStatus {
   return listingStatuses.includes(value as ListingStatus);
+}
+
+export function isListingActivationEligible(
+  status: ListingStatus,
+  startsAt: Date | null,
+  now = new Date(),
+) {
+  return (
+    status === "scheduled" &&
+    startsAt !== null &&
+    startsAt.getTime() <= now.getTime()
+  );
+}
+
+export function isListingClosureEligible(
+  status: ListingStatus,
+  endsAt: Date,
+  now = new Date(),
+) {
+  return status === "active" && endsAt.getTime() <= now.getTime();
+}
+
+export function getListingClosureResult(input: {
+  reservePriceCents: number | null;
+  highestBid: ListingClosureBid | null;
+}): ListingClosureResult {
+  if (!input.highestBid) {
+    return {
+      outcome: "unsold",
+      winnerUserId: null,
+      winningBidId: null,
+    };
+  }
+
+  if (
+    input.reservePriceCents !== null &&
+    input.highestBid.amountCents < input.reservePriceCents
+  ) {
+    return {
+      outcome: "reserve_not_met",
+      winnerUserId: null,
+      winningBidId: null,
+    };
+  }
+
+  return {
+    outcome: "sold",
+    winnerUserId: input.highestBid.bidderId,
+    winningBidId: input.highestBid.id,
+  };
 }
 
 export function canReceiveBids(
