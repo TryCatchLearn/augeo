@@ -6,6 +6,8 @@ const hoisted = vi.hoisted(() => ({
   push: vi.fn(),
   pathname: "/",
   searchParams: new URLSearchParams(),
+  getUnreadNotificationCount: vi.fn(),
+  listRecentNotifications: vi.fn(),
 }));
 
 vi.mock("next/navigation", async () => {
@@ -30,6 +32,24 @@ vi.mock("@/components/user-nav", () => ({
   UserNav: () => <div>User nav</div>,
 }));
 
+vi.mock("@/features/notifications/components/notification-bell", () => ({
+  NotificationBell: () => <div>Notification bell</div>,
+}));
+
+vi.mock("@/features/notifications/queries", () => ({
+  getUnreadNotificationCount: hoisted.getUnreadNotificationCount,
+  listRecentNotifications: hoisted.listRecentNotifications,
+}));
+
+vi.mock("@/features/notifications/actions", () => ({
+  markNotificationReadAction: vi.fn(),
+  markAllNotificationsReadAction: vi.fn(),
+}));
+
+vi.mock("@/db/client", () => ({
+  db: {},
+}));
+
 vi.mock("@/features/listings/components/auction-lifecycle-dev-button", () => ({
   AuctionLifecycleDevButton: () => (
     <div data-testid="dev-lifecycle-trigger">Lifecycle trigger</div>
@@ -47,6 +67,10 @@ describe("SiteHeader", () => {
     hoisted.push.mockReset();
     hoisted.pathname = "/";
     hoisted.searchParams = new URLSearchParams();
+    hoisted.getUnreadNotificationCount.mockReset();
+    hoisted.getUnreadNotificationCount.mockResolvedValue(0);
+    hoisted.listRecentNotifications.mockReset();
+    hoisted.listRecentNotifications.mockResolvedValue([]);
   });
 
   it("renders the always-visible listing search in the header", async () => {
@@ -150,5 +174,22 @@ describe("SiteHeader", () => {
     expect(
       screen.queryByTestId("dev-lifecycle-trigger"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the notification bell for authenticated users only", async () => {
+    hoisted.getSession.mockResolvedValue({
+      user: {
+        id: "user-1",
+        name: "Augeo User",
+        email: "user@example.test",
+        image: null,
+      },
+    });
+
+    const { SiteHeader } = await import("@/components/site-header");
+
+    render(await SiteHeader());
+
+    expect(screen.getByText("Notification bell")).toBeInTheDocument();
   });
 });

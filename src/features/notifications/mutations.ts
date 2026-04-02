@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { notification } from "@/db/schema";
@@ -236,18 +236,4 @@ export async function markAllNotificationsRead(
       readAt: new Date(),
     })
     .where(and(eq(notification.userId, userId), isNull(notification.readAt)));
-}
-
-export async function getUnreadNotificationCount(
-  userId: string,
-  database: Database,
-) {
-  const [result] = await database
-    .select({
-      count: sql<number>`count(*)`,
-    })
-    .from(notification)
-    .where(and(eq(notification.userId, userId), isNull(notification.readAt)));
-
-  return result?.count ?? 0;
 }

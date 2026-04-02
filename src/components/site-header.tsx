@@ -2,10 +2,20 @@ import { Gavel } from "lucide-react";
 import Link from "next/link";
 import { LinkButton } from "@/components/ui/button";
 import { UserNav } from "@/components/user-nav";
+import { db } from "@/db/client";
 import { getSession } from "@/features/auth/session";
 import { AuctionLifecycleDevButton } from "@/features/listings/components/auction-lifecycle-dev-button";
 import { NavbarSearch } from "@/features/listings/components/navbar-search";
 import { runAuctionLifecycleDevAction } from "@/features/listings/lifecycle-actions";
+import {
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+} from "@/features/notifications/actions";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import {
+  getUnreadNotificationCount,
+  listRecentNotifications,
+} from "@/features/notifications/queries";
 
 const navLinks = [
   {
@@ -16,6 +26,12 @@ const navLinks = [
 
 export async function SiteHeader() {
   const session = await getSession();
+  const notificationState = session
+    ? await Promise.all([
+        getUnreadNotificationCount(session.user.id, db),
+        listRecentNotifications(session.user.id, db),
+      ])
+    : null;
 
   return (
     <header className="sticky top-0 z-1000 isolate border-b border-border/70 bg-[color-mix(in_oklab,var(--color-background)_94%,black_6%)] shadow-[0_12px_38px_rgba(0,0,0,0.22)] backdrop-blur-xl">
@@ -57,11 +73,21 @@ export async function SiteHeader() {
             ) : null}
 
             {session ? (
-              <UserNav
-                name={session.user.name}
-                email={session.user.email}
-                image={session.user.image}
-              />
+              <>
+                <NotificationBell
+                  initialUnreadCount={notificationState?.[0] ?? 0}
+                  initialNotifications={notificationState?.[1] ?? []}
+                  markNotificationReadAction={markNotificationReadAction}
+                  markAllNotificationsReadAction={
+                    markAllNotificationsReadAction
+                  }
+                />
+                <UserNav
+                  name={session.user.name}
+                  email={session.user.email}
+                  image={session.user.image}
+                />
+              </>
             ) : (
               <div className="flex items-center gap-2">
                 <LinkButton href="/login" variant="secondary">

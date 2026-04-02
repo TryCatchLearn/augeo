@@ -33,6 +33,7 @@ import { getRealtimeConnectionMode } from "@/features/realtime/policy";
 
 type RealtimeContextValue = {
   client: RealtimeClient | null;
+  viewerId: string | null;
 };
 
 type RealtimeProviderProps = {
@@ -43,6 +44,7 @@ type RealtimeProviderProps = {
 
 const RealtimeContext = createContext<RealtimeContextValue>({
   client: null,
+  viewerId: null,
 });
 
 function createAblyRealtimeClient() {
@@ -173,8 +175,9 @@ export function RealtimeProvider({
   const value = useMemo(
     () => ({
       client,
+      viewerId: viewerId ?? null,
     }),
-    [client],
+    [client, viewerId],
   );
 
   return (
@@ -247,4 +250,30 @@ export function useListingLifecycleChangedSubscription(
     ABLY_LISTING_LIFECYCLE_EVENT_NAME,
     onEvent,
   );
+}
+
+export function useUserNotificationCreatedSubscription(
+  onEvent: (event: NotificationCreatedEvent) => void,
+) {
+  const { client, viewerId } = useRealtime();
+  const handleEvent = useEffectEvent(onEvent);
+
+  useEffect(() => {
+    if (!client || !viewerId) {
+      return;
+    }
+
+    const channel: RealtimeChannel = client.channels.get(
+      getUserChannelName(viewerId),
+    );
+    const listener = (message: InboundMessage) => {
+      handleEvent(message.data as NotificationCreatedEvent);
+    };
+
+    void channel.subscribe(ABLY_NOTIFICATION_CREATED_EVENT_NAME, listener);
+
+    return () => {
+      channel.unsubscribe(ABLY_NOTIFICATION_CREATED_EVENT_NAME, listener);
+    };
+  }, [client, handleEvent, viewerId]);
 }
