@@ -151,26 +151,6 @@ export function isListingStatus(value: string): value is ListingStatus {
   return listingStatuses.includes(value as ListingStatus);
 }
 
-export function isListingActivationEligible(
-  status: ListingStatus,
-  startsAt: Date | null,
-  now = new Date(),
-) {
-  return (
-    status === "scheduled" &&
-    startsAt !== null &&
-    startsAt.getTime() <= now.getTime()
-  );
-}
-
-export function isListingClosureEligible(
-  status: ListingStatus,
-  endsAt: Date,
-  now = new Date(),
-) {
-  return status === "active" && endsAt.getTime() <= now.getTime();
-}
-
 export function getListingClosureResult(input: {
   reservePriceCents: number | null;
   highestBid: ListingClosureBid | null;

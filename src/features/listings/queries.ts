@@ -317,18 +317,6 @@ async function getListingDetail(
     .orderBy(desc(bid.amountCents), desc(bid.createdAt))
     .limit(1);
 
-  const hasViewerBid = viewerId
-    ? (
-        await resolvedDatabase
-          .select({
-            id: bid.id,
-          })
-          .from(bid)
-          .where(and(eq(bid.listingId, listingId), eq(bid.bidderId, viewerId)))
-          .limit(1)
-      ).length > 0
-    : false;
-
   const currentBidCents =
     highestBid?.amountCents ?? listingDetail.currentBidCents ?? null;
   const currentPriceCents = getCurrentPriceCents(
@@ -350,7 +338,9 @@ async function getListingDetail(
     viewerBidStatus: getViewerBidStatus({
       viewerId,
       highestBidderId,
-      hasViewerBid,
+      hasViewerBid: Boolean(
+        viewerId && bidHistory.some((row) => row.bidderId === viewerId),
+      ),
     }),
     canPlaceBid: canPlaceBid({
       sellerId: listingDetail.sellerId,

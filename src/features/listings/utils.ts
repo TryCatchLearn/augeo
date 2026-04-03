@@ -1,4 +1,4 @@
-import type { ListingOutcome, ListingStatus } from "@/features/listings/domain";
+import type { ListingOutcome } from "@/features/listings/domain";
 
 export const countdownUrgencyTiers = [
   "neutral",
@@ -166,24 +166,5 @@ export function getListingEndStateCopy(input: {
     title: "This lot did not sell",
     description:
       "Bidding has closed and the listing ended without a completed sale.",
-  };
-}
-
-export function getListingTimeMeta(
-  status: ListingStatus,
-  endsAt: Date,
-  startsAt?: Date | null,
-  now = new Date(),
-) {
-  if (status === "scheduled" && startsAt) {
-    return {
-      label: "Starts In",
-      value: formatTimeRemaining(startsAt, now),
-    };
-  }
-
-  return {
-    label: status === "ended" ? "Auction Ended" : "Time Remaining",
-    value: formatTimeRemaining(endsAt, now),
   };
 }

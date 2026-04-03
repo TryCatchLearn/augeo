@@ -56,10 +56,6 @@ vi.mock("@/features/listings/components/auction-lifecycle-dev-button", () => ({
   ),
 }));
 
-vi.mock("@/features/listings/lifecycle-actions", () => ({
-  runAuctionLifecycleDevAction: vi.fn(),
-}));
-
 describe("SiteHeader", () => {
   beforeEach(() => {
     hoisted.getSession.mockReset();

@@ -1,8 +1,5 @@
 import type { ListingOutcome, ListingStatus } from "@/features/listings/domain";
-import type {
-  NotificationIcon,
-  NotificationType,
-} from "@/features/notifications/domain";
+import type { NotificationType } from "@/features/notifications/domain";
 
 export const ABLY_LISTING_EVENT_NAME = "bid.placed";
 export const ABLY_LISTING_LIFECYCLE_EVENT_NAME = "listing.lifecycle.changed";
@@ -40,7 +37,6 @@ export type NotificationCreatedEvent = {
   message: string;
   createdAt: string;
   readAt: string | null;
-  icon: NotificationIcon;
   outcome: ListingOutcome | null;
 };
 

@@ -6,7 +6,6 @@ import { db } from "@/db/client";
 import { getSession } from "@/features/auth/session";
 import { AuctionLifecycleDevButton } from "@/features/listings/components/auction-lifecycle-dev-button";
 import { NavbarSearch } from "@/features/listings/components/navbar-search";
-import { runAuctionLifecycleDevAction } from "@/features/listings/lifecycle-actions";
 import {
   markAllNotificationsReadAction,
   markNotificationReadAction,
@@ -16,6 +15,7 @@ import {
   getUnreadNotificationCount,
   listRecentNotifications,
 } from "@/features/notifications/queries";
+import { runAuctionLifecycle } from "@/server/auctions/lifecycle";
 
 const navLinks = [
   {
@@ -24,14 +24,26 @@ const navLinks = [
   },
 ];
 
+async function runAuctionLifecycleDevAction() {
+  "use server";
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Auction lifecycle can only be triggered manually in development.",
+    );
+  }
+
+  return runAuctionLifecycle();
+}
+
 export async function SiteHeader() {
   const session = await getSession();
-  const notificationState = session
+  const [unreadNotificationCount, recentNotifications] = session
     ? await Promise.all([
         getUnreadNotificationCount(session.user.id, db),
         listRecentNotifications(session.user.id, db),
       ])
-    : null;
+    : [0, []];
 
   return (
     <header className="sticky top-0 z-1000 isolate border-b border-border/70 bg-[color-mix(in_oklab,var(--color-background)_94%,black_6%)] shadow-[0_12px_38px_rgba(0,0,0,0.22)] backdrop-blur-xl">
@@ -75,8 +87,8 @@ export async function SiteHeader() {
             {session ? (
               <>
                 <NotificationBell
-                  initialUnreadCount={notificationState?.[0] ?? 0}
-                  initialNotifications={notificationState?.[1] ?? []}
+                  initialUnreadCount={unreadNotificationCount}
+                  initialNotifications={recentNotifications}
                   markNotificationReadAction={markNotificationReadAction}
                   markAllNotificationsReadAction={
                     markAllNotificationsReadAction

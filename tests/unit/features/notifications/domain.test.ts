@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAuctionOutcomeNotificationDedupeKey,
   buildOutbidNotificationDedupeKey,
+  getNotificationIconName,
   getNotificationPresentation,
   notificationTypes,
 } from "@/features/notifications/domain";
@@ -38,6 +39,8 @@ describe("notification domain helpers", () => {
   });
 
   it("maps outbid notifications into display copy", () => {
+    expect(getNotificationIconName("outbid")).toBe("gavel");
+
     expect(
       getNotificationPresentation({
         id: "notification-1",
@@ -46,7 +49,6 @@ describe("notification domain helpers", () => {
         readAt: null,
         payload: {
           listingId: "listing-1",
-          listingTitle: "Collector Camera",
           acceptedBidId: "bid-2",
           currentBidCents: 50_000,
           minimumNextBidCents: 51_000,
@@ -54,7 +56,6 @@ describe("notification domain helpers", () => {
         },
       }),
     ).toEqual({
-      icon: "gavel",
       title: "You've been outbid",
       message: "New current bid $500.00 across 2 bids. Next bid $510.00.",
       listingId: "listing-1",
@@ -76,7 +77,6 @@ describe("notification domain helpers", () => {
         },
       }),
     ).toEqual({
-      icon: "trophy",
       title: "You won this auction",
       message: "Rare Watch closed at $750.00.",
       listingId: "listing-2",
@@ -96,7 +96,6 @@ describe("notification domain helpers", () => {
         },
       }),
     ).toEqual({
-      icon: "badge-dollar-sign",
       title: "Your item sold",
       message: "Studio Light sold for $125.00.",
       listingId: "listing-3",
@@ -118,7 +117,6 @@ describe("notification domain helpers", () => {
         },
       }),
     ).toEqual({
-      icon: "circle-alert",
       title: "Your auction ended without a sale",
       message: "Vintage Amp ended below reserve and did not sell.",
       listingId: "listing-4",

@@ -16,8 +16,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { getNotificationIconName } from "@/features/notifications/domain";
 import type { NotificationListItem } from "@/features/notifications/queries";
-import type { NotificationCreatedEvent } from "@/features/realtime/events";
 import { useUserNotificationCreatedSubscription } from "@/features/realtime/provider";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +30,6 @@ type NotificationBellProps = {
   markAllNotificationsReadAction: () => Promise<{ readAt: string }>;
 };
 
-type NotificationInboxItem = NotificationListItem & {
-  icon: NotificationCreatedEvent["icon"];
-};
-
 export function NotificationBell({
   initialUnreadCount,
   initialNotifications,
@@ -44,9 +40,7 @@ export function NotificationBell({
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
-  const [notifications, setNotifications] = useState(() =>
-    initialNotifications.map(toInboxItem),
-  );
+  const [notifications, setNotifications] = useState(initialNotifications);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -73,7 +67,6 @@ export function NotificationBell({
         {
           id: event.notificationId,
           type: event.type,
-          icon: event.icon,
           title: event.title,
           message: event.message,
           listingId: event.listingId,
@@ -81,7 +74,7 @@ export function NotificationBell({
           createdAt: new Date(event.createdAt),
           readAt: event.readAt ? new Date(event.readAt) : null,
           isRead: event.readAt !== null,
-        } satisfies NotificationInboxItem,
+        } satisfies NotificationListItem,
         ...currentNotifications,
       ];
 
@@ -101,7 +94,7 @@ export function NotificationBell({
     return unreadCount > 9 ? "9+" : String(unreadCount);
   }, [unreadCount]);
 
-  const handleNotificationClick = (notification: NotificationInboxItem) => {
+  const handleNotificationClick = (notification: NotificationListItem) => {
     startTransition(async () => {
       try {
         const result = await markNotificationReadAction(notification.id);
@@ -203,7 +196,7 @@ export function NotificationBell({
         ) : (
           <div className="max-h-112 overflow-y-auto p-2">
             {notifications.map((notification) => {
-              const Icon = getNotificationIcon(notification.icon);
+              const Icon = getNotificationIcon(notification.type);
 
               return (
                 <button
@@ -252,30 +245,8 @@ export function NotificationBell({
   );
 }
 
-function toInboxItem(
-  notification: NotificationListItem,
-): NotificationInboxItem {
-  return {
-    ...notification,
-    icon: getNotificationIconName(notification.type),
-  };
-}
-
-function getNotificationIconName(type: NotificationListItem["type"]) {
-  switch (type) {
-    case "outbid":
-      return "gavel";
-    case "auction_won":
-      return "trophy";
-    case "item_sold":
-      return "badge-dollar-sign";
-    case "item_not_sold":
-      return "circle-alert";
-  }
-}
-
-function getNotificationIcon(icon: NotificationCreatedEvent["icon"]) {
-  switch (icon) {
+function getNotificationIcon(type: NotificationListItem["type"]) {
+  switch (getNotificationIconName(type)) {
     case "gavel":
       return Gavel;
     case "trophy":

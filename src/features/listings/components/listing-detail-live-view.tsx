@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListingAuctionActivityPanel } from "@/features/listings/components/listing-auction-activity-panel";
@@ -15,12 +15,8 @@ import {
   canPlaceBid,
   getMinimumNextBidCents,
   getViewerBidStatus,
-  type ViewerBidStatus,
 } from "@/features/listings/domain";
-import type {
-  BidHistoryRow,
-  ListingDetailData,
-} from "@/features/listings/queries";
+import type { ListingDetailData } from "@/features/listings/queries";
 import {
   type CountdownUrgencyTier,
   formatListingPrice,
@@ -37,22 +33,6 @@ type ListingDetailLiveViewProps = {
   viewerId?: string | null;
 };
 
-function hasViewerBid(
-  bidHistory: BidHistoryRow[],
-  viewerId?: string | null,
-  viewerBidStatus?: ViewerBidStatus,
-) {
-  if (!viewerId) {
-    return false;
-  }
-
-  if (viewerBidStatus && viewerBidStatus !== "none") {
-    return true;
-  }
-
-  return bidHistory.some((bid) => bid.bidderId === viewerId);
-}
-
 export function ListingDetailLiveView({
   initialListing,
   viewerId,
@@ -60,7 +40,7 @@ export function ListingDetailLiveView({
   const router = useRouter();
   const [listing, setListing] = useState(initialListing);
   const [isLocallyFinalizing, setIsLocallyFinalizing] = useState(false);
-  const [hasAttemptedRefresh, setHasAttemptedRefresh] = useState(false);
+  const refreshAttemptedRef = useRef(false);
 
   useEffect(() => {
     setListing(initialListing);
@@ -70,7 +50,7 @@ export function ListingDetailLiveView({
     }
 
     if (initialListing.status === "ended") {
-      setHasAttemptedRefresh(false);
+      refreshAttemptedRef.current = false;
     }
   }, [initialListing]);
 
@@ -89,11 +69,9 @@ export function ListingDetailLiveView({
       const nextViewerBidStatus = getViewerBidStatus({
         viewerId,
         highestBidderId: event.highestBidderId,
-        hasViewerBid: hasViewerBid(
-          nextBidHistory,
-          viewerId,
-          currentListing.viewerBidStatus,
-        ),
+        hasViewerBid:
+          currentListing.viewerBidStatus !== "none" ||
+          nextBidHistory.some((bid) => bid.bidderId === viewerId),
       });
 
       return {
@@ -143,7 +121,7 @@ export function ListingDetailLiveView({
 
     if (event.status === "ended") {
       setIsLocallyFinalizing(false);
-      setHasAttemptedRefresh(false);
+      refreshAttemptedRef.current = false;
     }
   });
 
@@ -155,10 +133,7 @@ export function ListingDetailLiveView({
     outcome: listing.outcome,
     bidCount: listing.bidCount,
     isSeller: isOwner,
-    isWinner:
-      viewerId !== null && viewerId !== undefined
-        ? viewerId === listing.winnerUserId
-        : false,
+    isWinner: viewerId === listing.winnerUserId,
     isFinalizing: isLocallyFinalizing,
   });
   const topCardTitle = showEndedState
@@ -202,11 +177,11 @@ export function ListingDetailLiveView({
 
     setIsLocallyFinalizing(true);
 
-    if (hasAttemptedRefresh) {
+    if (refreshAttemptedRef.current) {
       return;
     }
 
-    setHasAttemptedRefresh(true);
+    refreshAttemptedRef.current = true;
     router.refresh();
   };
 

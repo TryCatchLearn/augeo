@@ -17,8 +17,6 @@ import {
   getNextMainImageIdAfterDelete,
   getPublishedStatus,
   getViewerBidStatus,
-  isListingActivationEligible,
-  isListingClosureEligible,
   isListingStatus,
   listingConditions,
   listingOutcomes,
@@ -30,7 +28,6 @@ import {
 import {
   formatTimeRemaining,
   getCountdownUrgencyTier,
-  getListingTimeMeta,
 } from "@/features/listings/utils";
 
 describe("listing status rules", () => {
@@ -63,59 +60,6 @@ describe("listing status rules", () => {
     ).toBe(false);
     expect(
       canReceiveBids("active", new Date("2026-03-21T11:59:59.000Z"), now),
-    ).toBe(false);
-  });
-
-  it("checks scheduled activation eligibility from startsAt", () => {
-    const now = new Date("2026-04-02T12:00:00.000Z");
-
-    expect(
-      isListingActivationEligible(
-        "scheduled",
-        new Date("2026-04-02T11:59:59.000Z"),
-        now,
-      ),
-    ).toBe(true);
-    expect(
-      isListingActivationEligible(
-        "scheduled",
-        new Date("2026-04-02T12:00:01.000Z"),
-        now,
-      ),
-    ).toBe(false);
-    expect(isListingActivationEligible("scheduled", null, now)).toBe(false);
-    expect(
-      isListingActivationEligible(
-        "active",
-        new Date("2026-04-02T11:59:59.000Z"),
-        now,
-      ),
-    ).toBe(false);
-  });
-
-  it("checks active closure eligibility from endsAt", () => {
-    const now = new Date("2026-04-02T12:00:00.000Z");
-
-    expect(
-      isListingClosureEligible(
-        "active",
-        new Date("2026-04-02T12:00:00.000Z"),
-        now,
-      ),
-    ).toBe(true);
-    expect(
-      isListingClosureEligible(
-        "active",
-        new Date("2026-04-02T12:00:01.000Z"),
-        now,
-      ),
-    ).toBe(false);
-    expect(
-      isListingClosureEligible(
-        "scheduled",
-        new Date("2026-04-02T11:59:59.000Z"),
-        now,
-      ),
     ).toBe(false);
   });
 
@@ -386,34 +330,6 @@ describe("listing status rules", () => {
         now,
       }),
     ).toBe(false);
-  });
-
-  it("returns status-aware time metadata for detail pages", () => {
-    const now = new Date("2026-03-21T12:00:00.000Z");
-
-    expect(
-      getListingTimeMeta(
-        "scheduled",
-        new Date("2026-03-25T12:00:00.000Z"),
-        new Date("2026-03-21T14:30:00.000Z"),
-        now,
-      ),
-    ).toEqual({
-      label: "Starts In",
-      value: "2h 30m 0s left",
-    });
-
-    expect(
-      getListingTimeMeta(
-        "ended",
-        new Date("2026-03-21T11:59:00.000Z"),
-        null,
-        now,
-      ),
-    ).toEqual({
-      label: "Auction Ended",
-      value: "Ended",
-    });
   });
 
   it("normalizes smart listing AI output", () => {

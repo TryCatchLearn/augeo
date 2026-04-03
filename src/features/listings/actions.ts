@@ -245,21 +245,15 @@ export async function placeBidAction(input: unknown) {
       console.error("Failed to publish listing bid update.", error);
     }
 
-    if (
-      result.previousHighestBidderId &&
-      result.previousHighestBidderId !== result.highestBidderId
-    ) {
-      const previousHighestBidderId = result.previousHighestBidderId;
-
-      await Promise.all(
-        result.notificationEvents.map(async (event) => {
-          try {
-            await publishNotificationCreated(previousHighestBidderId, event);
-          } catch (error) {
-            console.error("Failed to publish notification update.", error);
-          }
-        }),
-      );
+    if (result.previousHighestBidderId && result.notificationEvent) {
+      try {
+        await publishNotificationCreated(
+          result.previousHighestBidderId,
+          result.notificationEvent,
+        );
+      } catch (error) {
+        console.error("Failed to publish notification update.", error);
+      }
     }
 
     revalidateListingPaths(result.listingId);

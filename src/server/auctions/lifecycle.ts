@@ -2,11 +2,7 @@ import { and, desc, eq, isNotNull, lte } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { bid, listing } from "@/db/schema";
-import {
-  getListingClosureResult,
-  isListingActivationEligible,
-  isListingClosureEligible,
-} from "@/features/listings/domain";
+import { getListingClosureResult } from "@/features/listings/domain";
 import {
   createAuctionWonNotification,
   createItemNotSoldNotification,
@@ -40,21 +36,12 @@ type LifecycleListingRecord = {
   id: string;
   status: typeof listing.$inferSelect.status;
   outcome: typeof listing.$inferSelect.outcome;
-  startsAt?: Date | null;
   endsAt: Date;
   currentBidCents: number | null;
   bidCount: number;
   winnerUserId: string | null;
   winningBidId: string | null;
 };
-
-const emptySummary = (): AuctionLifecycleSummary => ({
-  activatedCount: 0,
-  closedCount: 0,
-  soldCount: 0,
-  unsoldCount: 0,
-  reserveNotMetCount: 0,
-});
 
 async function resolveDatabase(database?: Database) {
   if (database) {
@@ -86,7 +73,13 @@ export async function runAuctionLifecycle(
 ) {
   const now = options.now ?? new Date();
   const database = await resolveDatabase(options.database);
-  const summary = emptySummary();
+  const summary: AuctionLifecycleSummary = {
+    activatedCount: 0,
+    closedCount: 0,
+    soldCount: 0,
+    unsoldCount: 0,
+    reserveNotMetCount: 0,
+  };
   const transactionResult = await database.transaction(async (tx) => {
     const listingEvents: ListingLifecycleChangedEvent[] = [];
     const notificationEvents: Array<{
@@ -110,7 +103,6 @@ export async function runAuctionLifecycle(
         id: listing.id,
         status: listing.status,
         outcome: listing.outcome,
-        startsAt: listing.startsAt,
         endsAt: listing.endsAt,
         currentBidCents: listing.currentBidCents,
         bidCount: listing.bidCount,
@@ -118,20 +110,7 @@ export async function runAuctionLifecycle(
         winningBidId: listing.winningBidId,
       });
 
-    for (const activatedListing of activatedListings) {
-      if (
-        !isListingActivationEligible(
-          "scheduled",
-          activatedListing.startsAt ?? null,
-          now,
-        )
-      ) {
-        continue;
-      }
-
-      listingEvents.push(toLifecycleEvent(activatedListing));
-    }
-
+    listingEvents.push(...activatedListings.map(toLifecycleEvent));
     summary.activatedCount = activatedListings.length;
 
     const listingsToClose = await tx
@@ -149,16 +128,6 @@ export async function runAuctionLifecycle(
       .where(and(eq(listing.status, "active"), lte(listing.endsAt, now)));
 
     for (const listingToClose of listingsToClose) {
-      if (
-        !isListingClosureEligible(
-          listingToClose.status,
-          listingToClose.endsAt,
-          now,
-        )
-      ) {
-        continue;
-      }
-
       const [highestBid] = await tx
         .select({
           id: bid.id,
@@ -239,33 +208,21 @@ export async function runAuctionLifecycle(
         }
       }
 
-      if (closedListing.outcome === "unsold") {
-        summary.unsoldCount += 1;
-
-        const sellerNotification = await createItemNotSoldNotification(tx, {
-          userId: listingToClose.sellerId,
-          listingId: listingToClose.id,
-          listingTitle: listingToClose.title,
-          outcome: "unsold",
-          createdAt: now,
-        });
-
-        if (sellerNotification) {
-          notificationEvents.push({
-            userId: listingToClose.sellerId,
-            event: sellerNotification,
-          });
+      if (
+        closedListing.outcome === "unsold" ||
+        closedListing.outcome === "reserve_not_met"
+      ) {
+        if (closedListing.outcome === "unsold") {
+          summary.unsoldCount += 1;
+        } else {
+          summary.reserveNotMetCount += 1;
         }
-      }
-
-      if (closedListing.outcome === "reserve_not_met") {
-        summary.reserveNotMetCount += 1;
 
         const sellerNotification = await createItemNotSoldNotification(tx, {
           userId: listingToClose.sellerId,
           listingId: listingToClose.id,
           listingTitle: listingToClose.title,
-          outcome: "reserve_not_met",
+          outcome: closedListing.outcome,
           createdAt: now,
         });
 

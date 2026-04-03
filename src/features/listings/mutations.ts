@@ -433,7 +433,10 @@ export async function placeBidForListing(
 
   try {
     return await resolvedDatabase.transaction(async (tx) => {
-      const notificationEvents: NotificationCreatedEvent[] = [];
+      const nextMinimumBidCents = getMinimumNextBidCents(
+        listingRecord.startingBidCents,
+        input.amountCents,
+      );
       const updatedListings = await tx
         .update(listing)
         .set({
@@ -478,38 +481,28 @@ export async function placeBidForListing(
         .innerJoin(user, eq(bid.bidderId, user.id))
         .where(eq(bid.id, bidId));
 
+      let notificationEvent: NotificationCreatedEvent | null = null;
+
       if (highestBid?.bidderId && highestBid.bidderId !== input.bidderId) {
-        const outbidNotification = await createOutbidNotification(tx, {
+        notificationEvent = await createOutbidNotification(tx, {
           userId: highestBid.bidderId,
           listingId: input.listingId,
-          listingTitle: listingRecord.title,
           acceptedBidId: bidId,
           currentBidCents: input.amountCents,
-          minimumNextBidCents: getMinimumNextBidCents(
-            listingRecord.startingBidCents,
-            input.amountCents,
-          ),
+          minimumNextBidCents: nextMinimumBidCents,
           bidCount: listingRecord.bidCount + 1,
           createdAt: now,
         });
-
-        if (outbidNotification) {
-          notificationEvents.push(outbidNotification);
-        }
       }
 
       return {
         listingId: input.listingId,
-        listingTitle: listingRecord.title,
         currentBidCents: input.amountCents,
         bidCount: listingRecord.bidCount + 1,
-        minimumNextBidCents: getMinimumNextBidCents(
-          listingRecord.startingBidCents,
-          input.amountCents,
-        ),
+        minimumNextBidCents: nextMinimumBidCents,
         highestBidderId: input.bidderId,
         previousHighestBidderId: highestBid?.bidderId ?? null,
-        notificationEvents,
+        notificationEvent,
         bid: placedBid,
       };
     });

@@ -18,7 +18,6 @@ export type NotificationIcon =
 
 export type OutbidNotificationPayload = {
   listingId: string;
-  listingTitle: string;
   acceptedBidId: string;
   currentBidCents: number;
   minimumNextBidCents: number;
@@ -63,12 +62,18 @@ export type NotificationRecord<
 };
 
 export type NotificationPresentation = {
-  icon: NotificationIcon;
   title: string;
   message: string;
   listingId: string;
   listingUrl: string;
   outcome?: Extract<ListingOutcome, "reserve_not_met" | "unsold">;
+};
+
+const notificationIcons: Record<NotificationType, NotificationIcon> = {
+  outbid: "gavel",
+  auction_won: "trophy",
+  item_sold: "badge-dollar-sign",
+  item_not_sold: "circle-alert",
 };
 
 export function buildOutbidNotificationDedupeKey(input: {
@@ -99,6 +104,10 @@ export function parseNotificationPayload<TType extends NotificationType>(
   return JSON.parse(payload) as NotificationPayloadByType[TType];
 }
 
+export function getNotificationIconName(type: NotificationType) {
+  return notificationIcons[type];
+}
+
 export function getNotificationPresentation<TType extends NotificationType>(
   record: NotificationRecord<TType>,
 ): NotificationPresentation {
@@ -107,7 +116,6 @@ export function getNotificationPresentation<TType extends NotificationType>(
       const payload = record.payload as OutbidNotificationPayload;
 
       return {
-        icon: "gavel",
         title: "You've been outbid",
         message: `New current bid ${formatListingPrice(payload.currentBidCents)} across ${payload.bidCount} bid${payload.bidCount === 1 ? "" : "s"}. Next bid ${formatListingPrice(payload.minimumNextBidCents)}.`,
         listingId: payload.listingId,
@@ -118,7 +126,6 @@ export function getNotificationPresentation<TType extends NotificationType>(
       const payload = record.payload as AuctionWonNotificationPayload;
 
       return {
-        icon: "trophy",
         title: "You won this auction",
         message: `${payload.listingTitle} closed at ${formatListingPrice(payload.finalBidCents)}.`,
         listingId: payload.listingId,
@@ -129,7 +136,6 @@ export function getNotificationPresentation<TType extends NotificationType>(
       const payload = record.payload as ItemSoldNotificationPayload;
 
       return {
-        icon: "badge-dollar-sign",
         title: "Your item sold",
         message: `${payload.listingTitle} sold for ${formatListingPrice(payload.finalBidCents)}.`,
         listingId: payload.listingId,
@@ -140,7 +146,6 @@ export function getNotificationPresentation<TType extends NotificationType>(
       const payload = record.payload as ItemNotSoldNotificationPayload;
 
       return {
-        icon: "circle-alert",
         title: "Your auction ended without a sale",
         message:
           payload.outcome === "reserve_not_met"

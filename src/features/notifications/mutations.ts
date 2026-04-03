@@ -41,7 +41,6 @@ function toNotificationCreatedEvent<TType extends NotificationType>(
     message: presentation.message,
     createdAt: record.createdAt.toISOString(),
     readAt: record.readAt?.toISOString() ?? null,
-    icon: presentation.icon,
     outcome: presentation.outcome ?? null,
   };
 }
@@ -95,7 +94,6 @@ export async function createOutbidNotification(
   input: {
     userId: string;
     listingId: string;
-    listingTitle: string;
     acceptedBidId: string;
     currentBidCents: number;
     minimumNextBidCents: number;
@@ -113,7 +111,6 @@ export async function createOutbidNotification(
     }),
     payload: {
       listingId: input.listingId,
-      listingTitle: input.listingTitle,
       acceptedBidId: input.acceptedBidId,
       currentBidCents: input.currentBidCents,
       minimumNextBidCents: input.minimumNextBidCents,

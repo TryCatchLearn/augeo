@@ -126,7 +126,6 @@ describe("NotificationBell", () => {
         message: "You won a live auction.",
         createdAt: "2026-04-02T13:00:00.000Z",
         readAt: null,
-        icon: "trophy",
         outcome: "sold",
       });
     });

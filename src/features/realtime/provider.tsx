@@ -19,6 +19,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { getNotificationIconName } from "@/features/notifications/domain";
 import {
   ABLY_LISTING_EVENT_NAME,
   ABLY_LISTING_LIFECYCLE_EVENT_NAME,
@@ -118,7 +119,7 @@ export function RealtimeProvider({
 
       seenNotificationEventsRef.current.add(event.notificationId);
 
-      const Icon = getNotificationIcon(event.icon);
+      const Icon = getNotificationIcon(event.type);
 
       toast.custom(
         () => (
@@ -187,8 +188,8 @@ export function RealtimeProvider({
   );
 }
 
-function getNotificationIcon(icon: NotificationCreatedEvent["icon"]) {
-  switch (icon) {
+function getNotificationIcon(type: NotificationCreatedEvent["type"]) {
+  switch (getNotificationIconName(type)) {
     case "gavel":
       return Gavel;
     case "trophy":
