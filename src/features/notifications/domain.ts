@@ -10,12 +10,6 @@ export const notificationTypes = [
 
 export type NotificationType = (typeof notificationTypes)[number];
 
-export type NotificationIcon =
-  | "gavel"
-  | "trophy"
-  | "badge-dollar-sign"
-  | "circle-alert";
-
 export type OutbidNotificationPayload = {
   listingId: string;
   acceptedBidId: string;
@@ -69,13 +63,6 @@ export type NotificationPresentation = {
   outcome?: Extract<ListingOutcome, "reserve_not_met" | "unsold">;
 };
 
-const notificationIcons: Record<NotificationType, NotificationIcon> = {
-  outbid: "gavel",
-  auction_won: "trophy",
-  item_sold: "badge-dollar-sign",
-  item_not_sold: "circle-alert",
-};
-
 export function buildOutbidNotificationDedupeKey(input: {
   recipientUserId: string;
   listingId: string;
@@ -102,10 +89,6 @@ export function parseNotificationPayload<TType extends NotificationType>(
   payload: string,
 ) {
   return JSON.parse(payload) as NotificationPayloadByType[TType];
-}
-
-export function getNotificationIconName(type: NotificationType) {
-  return notificationIcons[type];
 }
 
 export function getNotificationPresentation<TType extends NotificationType>(

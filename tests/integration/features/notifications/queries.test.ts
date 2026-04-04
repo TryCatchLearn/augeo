@@ -108,12 +108,12 @@ describe("notification queries", () => {
     expect(recentNotifications[0]).toMatchObject({
       title: "Your auction ended without a sale",
       message: "Listing 11 ended without any winning bids.",
-      isRead: false,
+      readAt: null,
     });
     expect(recentNotifications[1]).toMatchObject({
       title: "You've been outbid",
       listingUrl: "/listings/listing-10",
-      isRead: false,
+      readAt: null,
     });
   });
 });

@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import type { ListingOutcome } from "@/features/listings/domain";
 
 export const countdownUrgencyTiers = [
@@ -33,13 +34,7 @@ export function formatDateTimeLocalInput(value: Date | null) {
     return "";
   }
 
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  const hours = String(value.getHours()).padStart(2, "0");
-  const minutes = String(value.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return format(value, "yyyy-MM-dd'T'HH:mm");
 }
 
 export function formatListingPrice(cents: number) {
@@ -51,12 +46,7 @@ export function formatListingPrice(cents: number) {
 }
 
 export function formatBidTimestamp(value: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(value);
+  return format(value, "MMM d, h:mm a");
 }
 
 export function formatTimeRemaining(endsAt: Date, now = new Date()) {

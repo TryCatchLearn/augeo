@@ -3,24 +3,15 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type * as schema from "@/db/schema";
 import { notification } from "@/db/schema";
 import {
-  getNotificationPresentation,
   type NotificationRecord,
   parseNotificationPayload,
 } from "@/features/notifications/domain";
+import {
+  type NotificationListItem,
+  toNotificationListItem,
+} from "@/features/notifications/list-item";
 
 type Database = LibSQLDatabase<typeof schema>;
-
-export type NotificationListItem = {
-  id: string;
-  type: NotificationRecord["type"];
-  title: string;
-  message: string;
-  listingId: string;
-  listingUrl: string;
-  createdAt: Date;
-  readAt: Date | null;
-  isRead: boolean;
-};
 
 export async function listRecentNotifications(
   userId: string,
@@ -47,19 +38,8 @@ export async function listRecentNotifications(
       createdAt: row.createdAt,
       readAt: row.readAt,
     } satisfies NotificationRecord;
-    const presentation = getNotificationPresentation(record);
 
-    return {
-      id: row.id,
-      type: row.type,
-      title: presentation.title,
-      message: presentation.message,
-      listingId: presentation.listingId,
-      listingUrl: presentation.listingUrl,
-      createdAt: row.createdAt,
-      readAt: row.readAt,
-      isRead: row.readAt !== null,
-    } satisfies NotificationListItem;
+    return toNotificationListItem(record) satisfies NotificationListItem;
   });
 }
 

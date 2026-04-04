@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildAuctionOutcomeNotificationDedupeKey,
   buildOutbidNotificationDedupeKey,
-  getNotificationIconName,
   getNotificationPresentation,
   notificationTypes,
 } from "@/features/notifications/domain";
@@ -39,8 +38,6 @@ describe("notification domain helpers", () => {
   });
 
   it("maps outbid notifications into display copy", () => {
-    expect(getNotificationIconName("outbid")).toBe("gavel");
-
     expect(
       getNotificationPresentation({
         id: "notification-1",

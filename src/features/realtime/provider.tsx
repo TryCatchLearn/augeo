@@ -6,7 +6,6 @@ import {
   type RealtimeChannel,
   type RealtimeClient,
 } from "ably";
-import { BadgeDollarSign, CircleAlert, Gavel, Trophy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -19,7 +18,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { getNotificationIconName } from "@/features/notifications/domain";
+import { getNotificationIcon } from "@/features/notifications/get-notification-icon";
 import {
   ABLY_LISTING_EVENT_NAME,
   ABLY_LISTING_LIFECYCLE_EVENT_NAME,
@@ -186,19 +185,6 @@ export function RealtimeProvider({
       {children}
     </RealtimeContext.Provider>
   );
-}
-
-function getNotificationIcon(type: NotificationCreatedEvent["type"]) {
-  switch (getNotificationIconName(type)) {
-    case "gavel":
-      return Gavel;
-    case "trophy":
-      return Trophy;
-    case "badge-dollar-sign":
-      return BadgeDollarSign;
-    case "circle-alert":
-      return CircleAlert;
-  }
 }
 
 export function useRealtime() {

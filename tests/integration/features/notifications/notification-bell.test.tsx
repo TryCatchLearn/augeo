@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
-import type { NotificationListItem } from "@/features/notifications/queries";
+import type { NotificationListItem } from "@/features/notifications/list-item";
 
 const hoisted = vi.hoisted(() => ({
   push: vi.fn(),
@@ -126,7 +126,6 @@ describe("NotificationBell", () => {
         message: "You won a live auction.",
         createdAt: "2026-04-02T13:00:00.000Z",
         readAt: null,
-        outcome: "sold",
       });
     });
 
@@ -150,6 +149,5 @@ function buildNotifications(count: number): NotificationListItem[] {
     listingUrl: `/listings/listing-${index}`,
     createdAt: new Date(`2026-04-02T12:0${Math.min(index, 9)}:00.000Z`),
     readAt: null,
-    isRead: false,
   }));
 }

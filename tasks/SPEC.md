@@ -257,7 +257,7 @@ Every phase follows the same lifecycle:
 - [ ] Phase 2 - AI Features
 - [x] Phase 3 - Browse and Search Listings
 - [x] Phase 4 - Bidding and Real-Time Updates
-- [ ] Phase 5 - Auction Finalization and Notifications
+- [x] Phase 5 - Auction Finalization and Notifications
 - [ ] Phase 6 - User Dashboard
 - [ ] Phase 7 - Polish, CI, Prod DB switch and publishing
 
@@ -548,6 +548,8 @@ Detailed execution plan: [tasks/TODO.md](./TODO.md)
 
 Objective: automate auction lifecycle transitions, surface time-sensitive auction endings in the UI, and add persistent in-app notifications with a live navbar inbox.
 
+Status: Accepted on 2026-04-04
+
 ### Phase 5 Summary
 
 Phase 5 is split into four sequential planning and implementation tracks. `5A` introduces one shared auction lifecycle engine behind a single protected cron endpoint plus a dev-only manual trigger in the navbar. That work owns scheduled-to-active transitions, expired-auction finalization, winner persistence, idempotent reruns, and lifecycle realtime events.
@@ -573,17 +575,17 @@ Phase 5 is split into four sequential planning and implementation tracks. `5A` i
 
 ### Phase 5 Tracker
 
-- [ ] Detailed phase spec approved
-- [ ] `tasks/TODO.md` execution plan finalized
-- [ ] `5A` lifecycle engine and protected endpoint finalized
-- [ ] `5B` countdown timer UI and ended-state rendering finalized
-- [ ] `5C` persistent notification creation and live toast delivery finalized
-- [ ] `5D` navbar bell, inbox, and read actions finalized
-- [ ] Unit tests completed
-- [ ] Integration tests completed
-- [ ] 80%+ coverage met
-- [ ] 100% critical-path integration coverage met
-- [ ] Phase accepted
+- [x] Detailed phase spec approved
+- [x] `tasks/TODO.md` execution plan finalized
+- [x] `5A` lifecycle engine and protected endpoint finalized
+- [x] `5B` countdown timer UI and ended-state rendering finalized
+- [x] `5C` persistent notification creation and live toast delivery finalized
+- [x] `5D` navbar bell, inbox, and read actions finalized
+- [x] Unit tests completed
+- [x] Integration tests completed
+- [x] 80%+ coverage met
+- [x] 100% critical-path integration coverage met
+- [x] Phase accepted
 
 ## Phase 6 - User Dashboard
 

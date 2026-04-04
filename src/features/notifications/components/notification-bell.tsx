@@ -1,14 +1,9 @@
 "use client";
 
-import {
-  BadgeDollarSign,
-  Bell,
-  CircleAlert,
-  Gavel,
-  Trophy,
-} from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +11,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { getNotificationIconName } from "@/features/notifications/domain";
-import type { NotificationListItem } from "@/features/notifications/queries";
+import { getNotificationIcon } from "@/features/notifications/get-notification-icon";
+import {
+  type NotificationListItem,
+  toNotificationListItemFromEvent,
+} from "@/features/notifications/list-item";
 import { useUserNotificationCreatedSubscription } from "@/features/realtime/provider";
 import { cn } from "@/lib/utils";
 
@@ -41,17 +39,6 @@ export function NotificationBell({
   const [isPending, startTransition] = useTransition();
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [notifications, setNotifications] = useState(initialNotifications);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 60_000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, []);
 
   useUserNotificationCreatedSubscription((event) => {
     setNotifications((currentNotifications) => {
@@ -64,17 +51,7 @@ export function NotificationBell({
       }
 
       const nextNotifications = [
-        {
-          id: event.notificationId,
-          type: event.type,
-          title: event.title,
-          message: event.message,
-          listingId: event.listingId,
-          listingUrl: event.listingUrl,
-          createdAt: new Date(event.createdAt),
-          readAt: event.readAt ? new Date(event.readAt) : null,
-          isRead: event.readAt !== null,
-        } satisfies NotificationListItem,
+        toNotificationListItemFromEvent(event),
         ...currentNotifications,
       ];
 
@@ -106,13 +83,12 @@ export function NotificationBell({
               ? {
                   ...currentNotification,
                   readAt,
-                  isRead: true,
                 }
               : currentNotification,
           ),
         );
         setUnreadCount((currentUnreadCount) =>
-          notification.isRead
+          notification.readAt !== null
             ? currentUnreadCount
             : Math.max(0, currentUnreadCount - 1),
         );
@@ -134,7 +110,6 @@ export function NotificationBell({
           currentNotifications.map((notification) => ({
             ...notification,
             readAt,
-            isRead: true,
           })),
         );
         setUnreadCount(0);
@@ -197,6 +172,7 @@ export function NotificationBell({
           <div className="max-h-112 overflow-y-auto p-2">
             {notifications.map((notification) => {
               const Icon = getNotificationIcon(notification.type);
+              const isRead = notification.readAt !== null;
 
               return (
                 <button
@@ -205,7 +181,7 @@ export function NotificationBell({
                   aria-label={notification.title}
                   className={cn(
                     "flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors outline-none hover:bg-accent/55 focus-visible:bg-accent/55",
-                    notification.isRead
+                    isRead
                       ? "opacity-80"
                       : "bg-primary/6 ring-1 ring-primary/12",
                   )}
@@ -215,7 +191,7 @@ export function NotificationBell({
                   <span
                     className={cn(
                       "mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border",
-                      notification.isRead
+                      isRead
                         ? "border-border/70 bg-muted/60 text-muted-foreground"
                         : "border-primary/20 bg-primary/10 text-primary",
                     )}
@@ -228,7 +204,9 @@ export function NotificationBell({
                         {notification.title}
                       </span>
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {formatRelativeTime(notification.createdAt, now)}
+                        {formatDistanceToNow(notification.createdAt, {
+                          addSuffix: true,
+                        })}
                       </span>
                     </span>
                     <span className="mt-1 block text-sm text-muted-foreground">
@@ -243,45 +221,4 @@ export function NotificationBell({
       </PopoverContent>
     </Popover>
   );
-}
-
-function getNotificationIcon(type: NotificationListItem["type"]) {
-  switch (getNotificationIconName(type)) {
-    case "gavel":
-      return Gavel;
-    case "trophy":
-      return Trophy;
-    case "badge-dollar-sign":
-      return BadgeDollarSign;
-    case "circle-alert":
-      return CircleAlert;
-  }
-}
-
-function formatRelativeTime(date: Date, now: number) {
-  const deltaSeconds = Math.round((date.getTime() - now) / 1000);
-  const formatter = new Intl.RelativeTimeFormat("en", {
-    numeric: "auto",
-  });
-  const absoluteSeconds = Math.abs(deltaSeconds);
-
-  if (absoluteSeconds < 60) {
-    return formatter.format(deltaSeconds, "second");
-  }
-
-  const deltaMinutes = Math.round(deltaSeconds / 60);
-
-  if (Math.abs(deltaMinutes) < 60) {
-    return formatter.format(deltaMinutes, "minute");
-  }
-
-  const deltaHours = Math.round(deltaMinutes / 60);
-
-  if (Math.abs(deltaHours) < 24) {
-    return formatter.format(deltaHours, "hour");
-  }
-
-  const deltaDays = Math.round(deltaHours / 24);
-
-  return formatter.format(deltaDays, "day");
 }

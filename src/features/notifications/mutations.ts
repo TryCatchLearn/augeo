@@ -41,7 +41,6 @@ function toNotificationCreatedEvent<TType extends NotificationType>(
     message: presentation.message,
     createdAt: record.createdAt.toISOString(),
     readAt: record.readAt?.toISOString() ?? null,
-    outcome: presentation.outcome ?? null,
   };
 }
 

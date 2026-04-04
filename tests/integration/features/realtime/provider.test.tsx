@@ -223,7 +223,6 @@ describe("RealtimeProvider", () => {
       listingUrl: "/listings/listing-1",
       createdAt: "2026-04-02T12:00:00.000Z",
       readAt: null,
-      outcome: null,
     };
 
     await act(async () => {

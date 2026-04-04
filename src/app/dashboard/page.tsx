@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireSession } from "@/features/auth/session";
@@ -15,7 +16,7 @@ export default async function DashboardPage() {
     },
     {
       label: "Session expires",
-      value: session.session.expiresAt.toLocaleString(),
+      value: format(session.session.expiresAt, "PPpp"),
     },
   ];
 

@@ -37,7 +37,6 @@ export type NotificationCreatedEvent = {
   message: string;
   createdAt: string;
   readAt: string | null;
-  outcome: ListingOutcome | null;
 };
 
 export type ListingLifecycleChangedEvent = {
